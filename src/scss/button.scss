@@ -1,0 +1,23 @@
+@import './colors.scss';
+
+.button-primary {
+  background-color: $color-primary;
+  border-color: $color-primary;
+  color: white;
+
+  &:hover {
+    background-color: $color-tertiary;
+    border-color: $color-tertiary;
+  }
+}
+
+.button-secondary {
+  background-color: $color-secondary;
+  border-color: $color-secondary;
+  color: white;
+
+  &:hover {
+    background-color: $color-tertiary;
+    border-color: $color-tertiary;
+  }
+}

@@ -1,0 +1,83 @@
+@import '../../scss/colors.scss';
+@import '../../scss/typography.scss';
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  padding: 0.5rem 1rem;
+
+  &__form {
+    margin: auto;
+  }
+
+  &__buttons {
+    display: flex;
+    flex-direction: row;
+    position: absolute;
+    justify-content: space-between;
+    bottom: 1%;
+    left: 2%;
+    right: 2%;
+
+    & > button {
+      width: 40%;
+    }
+  }
+
+  &__participants {
+    overflow-y: auto;
+    max-height: 75%;
+
+    &-item {
+      position: relative;
+      display: block;
+      color: $color-primary;
+      padding: 0.5rem 0;
+      text-decoration: none;
+      border: 1px solid rgba(0, 0, 0, 0.125);
+    }
+  }
+}
+
+.btn-enable {
+  background-color: #0000ff;
+  color: white;
+}
+
+.btn-disable {
+  background-color: #ff0000;
+  color: white;
+}
+
+.btn-join {
+  padding: 6% 33%;
+  margin: auto auto;
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .chat {
+    &__buttons {
+      & > button {
+        width: auto;
+      }
+    }
+  }
+}
+
+@media (max-width: 750px) and (orientation: landscape) {
+  .btn-join {
+    font-size: 2.6vmin
+  }
+
+  .chat {
+    &__buttons {
+      & > button {
+        width: auto;
+        font-size: 2.6vmin;
+      }
+    }
+  }
+}

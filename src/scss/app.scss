@@ -1,0 +1,40 @@
+@import './colors.scss';
+
+#root {
+  background-color: black;
+}
+
+.App {
+  background-color: black;
+  font-size: 1.6vmin;
+  color: $color-primary;
+  min-height: 100%;
+}
+
+.App-logo {
+  height: 5vmin;
+  position: absolute;
+  top: 1%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 750px) {
+  .App {
+    font-size: 3vmin;
+  }
+
+  .App-logo {
+    height: 7vmin;
+  }
+}
+
+@media (max-width: 600px) {
+  .App {
+    font-size: 4vmin;
+  }
+
+  .App-logo {
+    height: 9vmin;
+  }
+}
