@@ -1,6 +1,7 @@
 import { BehaviorSubject } from 'rxjs';
 import {
   JoinAudioOptions,
+  JoinVideoOptions,
   MessageAudioJoin,
   Participant,
   PluginHandle,
@@ -9,24 +10,25 @@ import {
   MessageTalkEvent
 } from './janus.types';
 
-import Janus from '../../janus/janus';
-
-// import * as Janus from '../../janus/janus.js'
-// import * as Janus from module('./../janus/janus')
+import Janus from '../../janus/janus'; // new import
+// const Janus = require('../../janus/janus'); // old import
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-// const Janus = require('../../janus/janus');
 
 const AUDOBRIDGE_PLUGIN_NAME = 'janus.plugin.audiobridge';
+const VIDEOROOM_PLUGIN_NAME = 'janus.plugin.videoroom';
 const opaqueId = 'audiobridgetest-' + Janus.randomString(12);
 class JanusClient {
   url: string; // Janus URL
   audioOptions: JoinAudioOptions = {}; // Audio options
+  videoOptions: JoinVideoOptions = {}; // Video options
   initJanus = false; // Specify if the Janus library was initialized or not
   webrtcUp = false; // Specify if the audio stream was sent to Janus or not
   client: JanusClass | undefined; // Instance of Janus
   audioBridgePlugin: PluginHandle | undefined; // Audio Bridge plugin instance
-  AUDIO_ROOM_DEFAULT = 1234; // Default room
+  videoRoomPlugin: PluginHandle | undefined; // Video Room plugin instance
+  AUDIO_ROOM_DEFAULT = 1234; // Default audio room
+  VIDEO_ROOM_DEFAULT = 1234; // Default video room
   id = 0; // Id that identify the user in Janus
   participants: Participant[] = []; // Users connected in the audio chat
   audioElement: unknown;
@@ -41,7 +43,7 @@ class JanusClient {
     this.url = url;
   }
 
-  init(debug = false): Promise<boolean> {
+  init(debug = true): Promise<boolean> {
     return new Promise((resolve, reject) => {
       try {
         Janus.init({
@@ -58,18 +60,26 @@ class JanusClient {
   }
 
   /**
-   * Connect to Janus, create the session and attach to AudioBridge
+   * Connect to Janus, create the session and attach to AudioBridge and VideoRoom
    */
-  connectToAudioJanus(): Promise<void> {
+  connectToJanus(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.initJanus) {
         this.createSession()
           .catch(reject)
           .then(async () => {
             try {
-              this.audioBridgePlugin = await this.attachToAudioBridge();
+              this.audioBridgePlugin = await this.attachToAudioBridge();              
               Janus.log(`Plugin attached! ( 
                 ${this.audioBridgePlugin.getPlugin()}, id=${this.audioBridgePlugin.getId()})`);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+            try {
+              this.videoRoomPlugin = await this.attachToVideoRoom();
+              Janus.log(`Plugin attached! ( 
+                ${this.videoRoomPlugin.getPlugin()}, id=${this.videoRoomPlugin.getId()})`);
               resolve();
             } catch (error) {
               reject(error);
@@ -86,7 +96,7 @@ class JanusClient {
    * @param options User audio options
    * @param room (Optional) Number room to join. By default is 1234
    */
-  async joinChat(options: JoinAudioOptions, room?: number): Promise<void> {
+  joinAudioChat(options: JoinAudioOptions, room?: number): void {
     this.audioOptions = options;
     const roomToJoin = room || this.AUDIO_ROOM_DEFAULT;
     const { display, muted } = options;
@@ -104,6 +114,9 @@ class JanusClient {
     this.audioBridgePlugin && this.audioBridgePlugin.send({ message });
   }
 
+  /**
+   * Function that requests Janus to mute/unmute the audio coming from audioBridge.
+   */
   mute(muted: boolean): void {
     if (this.webrtcUp) {
       const message = {
@@ -111,6 +124,42 @@ class JanusClient {
         muted
       };
       this.audioBridgePlugin && this.audioBridgePlugin.send({ message });
+    }
+  }
+
+ /**
+   * Join a user in a room to allow audio chat
+   * @param options User audio options
+   * @param room (Optional) Number room to join. By default is 1234
+   */
+  joinVideoRoom(options: JoinVideoOptions, room?: number): void {
+    this.videoOptions = options;
+    const roomToJoin = room || this.VIDEO_ROOM_DEFAULT;
+    const { display, ptype } = options;
+    this.user = {
+      id: 0,
+      display,
+      setup: true
+    };
+    const message = {
+      request: 'join',
+      display,
+      ptype,
+      room: roomToJoin
+    };
+    this.videoRoomPlugin && this.videoRoomPlugin.send({ message });
+  }
+
+  /**
+   * Function that requests Janus to send or stop sending the video from videoRoom.
+   */
+  selectVideo(selected: boolean): void {
+    if (this.webrtcUp) {
+      const message = {
+        request: '',
+        send: selected
+      };
+      this.videoRoomPlugin && this.videoRoomPlugin.send({ message });
     }
   }
 
@@ -150,12 +199,30 @@ class JanusClient {
     });
   }
 
+  private attachToVideoRoom(): Promise<PluginHandle> {
+    return new Promise<PluginHandle>((resolve, reject) => {
+      this.client && this.client.attach({
+        plugin: VIDEOROOM_PLUGIN_NAME,
+        opaqueId, // TODO new id for video??
+        success: resolve,
+        error: reject,
+        iceState: this.onIceState.bind(this),
+        mediaState: this.onMediaState.bind(this),
+        webrtcState: this.onWebrtcState.bind(this),
+        onmessage: this.onMessage.bind(this),
+        onlocalstream: this.onLocalStream,
+        onremotestream: this.onRemoteStream.bind(this),
+        oncleanup: this.onCleanUp.bind(this)
+      });
+    });
+  }
+
   private onIceState(state: unknown): void {
     Janus.log(`ICE state changed to ${state}`);
   }
 
   private onMediaState(medium: 'audio' | 'video', receiving?: boolean): void {
-    Janus.log(`Janus ${receiving ? 'started' : 'stopped'}receiving our ${medium}`);
+    Janus.log(`Janus ${receiving ? 'started' : 'stopped'} receiving our ${medium}`);
   }
 
   private onWebrtcState(isConnected: boolean): void {
@@ -164,7 +231,9 @@ class JanusClient {
 
   private onMessage(message, jsep): void {
     const { audiobridge: event } = message;
-
+    console.log('Janus says: ');
+    console.log(message);
+    
     if (event) {
       switch (event) {
         case MessagesType.MESSAGE_JOINED: {
