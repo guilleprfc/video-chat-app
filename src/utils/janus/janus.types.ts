@@ -24,11 +24,38 @@ export type Participant = {
   ref?: any
 }
 
+export type Publisher = {
+  id: number
+  display: string
+  streams: Array<Stream>
+}
+
+export type Stream = {
+  type: string // <type of published stream #1 (audio|video|data)>
+  mindex: string // <unique mindex of published stream #1>
+  mid: string // <unique mid of of published stream #1>
+  disabled: boolean // <if true, it means this stream is currently inactive/disabled (and so codec, description, etc. will be missing)>
+  codec: string // <codec used for published stream #1>
+  description: string // <text description of published stream #1, if any>
+  moderated: boolean // <true if this stream audio has been moderated for this participant>
+  simulcast: boolean // <true if published stream #1 uses simulcast (VP8 and H.264 only)>
+  svc: boolean // <true if published stream #1 uses SVC (VP9 only)>
+  talking: boolean // <true|false, whether the publisher stream has audio activity or not (only if audio levels are used)>
+}
+
 export type MessageAudioJoin = {
   audiobridge: 'joined'
   id: number
   participants: Array<Participant>
   room: number
+}
+
+export type MessageVideoJoin = {
+  videoroom: 'joined'
+  id: number
+  publishers: Array<Publisher>
+  room: number
+  display: string
 }
 
 export type MessageAudioLeave = {
@@ -213,4 +240,7 @@ export enum MessagesType {
   MESSAGE_EVENT = 'event',
   MESSAGE_TALKING = 'talking',
   MESSAGE_STOP_TALKING = 'stopped-talking',
+  MESSAGE_UPDATE = 'updated',
+  MESSAGE_ATTACHED = 'attached',
+  MESSAGE_PARTICIPANTS = 'participants'
 }

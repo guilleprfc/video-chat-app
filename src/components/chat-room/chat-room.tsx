@@ -31,11 +31,15 @@ const ChatRoom: React.FC = () => {
   const [state, dispatch] = useReducer(audioChatReducer, { janusClient: null })
   const [name, setName] = useState<string>('')
   const [isMuted, setIsMuted] = useState<boolean>(false)
+  const [isGuide, setIsGuide] = useState<boolean>(false)
+  const [guideIsSubscribed, setGuideIsSubscribed] = useState<boolean>(false)
   const [isSelected, setIsSelected] = useState<boolean>(false)
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [publishers, setPublishers] = useState<Participant[]>([])
   const [isJanusEnabled, setIsJanusEnabled] = useState<boolean>(false)
   const [user, setUser] = useState<Participant>()
   const audioRef = useRef(null)
+  const localVideoRef = useRef(null)
 
   const destroyJanusSession = () => {
     if (state && state.janusClient) {
@@ -44,6 +48,7 @@ const ChatRoom: React.FC = () => {
     }
     setUser(undefined)
     setIsMuted(false)
+    setIsGuide(false)
     setIsSelected(false)
     setIsJanusEnabled(false)
     dispatch({ type: REMOVE_JANUS_CLIENT })
@@ -81,9 +86,9 @@ const ChatRoom: React.FC = () => {
     }
   }
 
-  const connectAudioChat = (userName, janusClient) => {
+  const connectAudioRoom = (userName, janusClient) => {
     if (janusClient) {
-      janusClient.joinAudioChat({ display: userName, muted: false }, 1234)
+      janusClient.joinAudioRoom({ display: userName, muted: false }, 1234)
       janusClient.onUser.subscribe(setUser)
     }
   }
@@ -104,12 +109,15 @@ const ChatRoom: React.FC = () => {
 
     const janusUrl = `http://${window.location.hostname}:${port}/janus` // TODO using http because ws is causing problems
 
+    // Instantiate the JanusClient
     console.log(janusUrl)
     const janusClient = new JanusClient(janusUrl)
     janusClient.setAudio(audioRef.current)
+    janusClient.setVideo(localVideoRef.current)
 
+    // Execute the Janus.init, connect the JanusClient to the Janus server
     try {
-      await janusClient.init(false)
+      await janusClient.init(true) // The parameter toggles the Janus logs on/off
       janusClient.onTalking.subscribe(onTalkingEvent)
       janusClient.onStopTalking.subscribe(onStopTalkingEvent)
       janusClient.onParticipants.subscribe((participants) => {
@@ -121,11 +129,26 @@ const ChatRoom: React.FC = () => {
         })
         setParticipants(newParticipants)
       })
+      janusClient.onPublishers.subscribe((publishers) => {
+        const newPublishers = publishers.map((user) => {
+          return {
+            ...user,
+            ref: React.createRef(),
+          }
+        })
+        setPublishers(newPublishers)
+      })
+      // Create a session and attach plugin handlers.
       await janusClient.connectToJanus()
+      // If the username is already in the url, connect to audio and video rooms
       const userName = getParamFromUrl('user')
       if (userName) {
-        connectAudioChat(userName, janusClient)
+        connectAudioRoom(userName, janusClient)
         connectVideoRoom(userName, janusClient)
+        if (userName === 'Guide') {
+          setIsGuide(true)
+          janusClient.setUserIsGuide(true)
+        }
       }
       dispatch({ type: ACTION_SET_JANUS_CLIENT, payload: janusClient })
       setIsJanusEnabled(true)
@@ -141,7 +164,11 @@ const ChatRoom: React.FC = () => {
 
   const onSumbitForm = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    connectAudioChat(name, state?.janusClient)
+    if (name === 'Guide') {
+      setIsGuide(true)
+      state?.janusClient.setUserIsGuide(true)
+    }
+    connectAudioRoom(name, state?.janusClient)
     connectVideoRoom(name, state?.janusClient)
   }
 
@@ -153,12 +180,20 @@ const ChatRoom: React.FC = () => {
     }
   }
 
-  const onClickSelectVideo = () => {
-    console.log('---- Video selected for user ----');
-    const value = !isSelected
-    setIsSelected(value)
-    if (state && state.janusClient) {
-      state.janusClient.selectVideo(value)
+  const onClickSelectVideo = (event: React.MouseEvent<SVGElement>, participant: Participant) => {
+    event.preventDefault()
+    console.log('------------------------------------------------------------------------------------------------------------------')
+    console.log('------------------------------------------------------------------------------------------------------------------')
+    console.log('------------------------------------------------------------------------------------------------------------------')
+    setIsSelected(!isSelected)
+    const relatedPublisher = publishers.find((publisher) => participant.display === publisher.display)
+    console.log(relatedPublisher)
+    if (relatedPublisher) {
+      console.log('Selected participant\'s publisher id: ' + relatedPublisher.id)
+      if (state && state.janusClient)
+        state.janusClient.selectVideo(relatedPublisher)
+    } else {
+      console.log('Error: Participant is not a publisher.')
     }
   }
 
@@ -166,8 +201,9 @@ const ChatRoom: React.FC = () => {
     <Grid>
       <GridItem classItem="Graph" title="Camera">
         <>
-          <div id="myvideo" className="container shorter">
+          <div id="myvideo" className="video-container">
             <video
+              ref={localVideoRef}
               id="localvideo"
               className="rounded centered"
               width="100%"
@@ -179,7 +215,7 @@ const ChatRoom: React.FC = () => {
           </div>
         </>
       </GridItem>
-      <GridItem classItem="Chat" title="Chat room">
+      <GridItem classItem="Chat" title="Tour room">
         <div className="chat">
           {isJanusEnabled && (
             <>
@@ -204,7 +240,7 @@ const ChatRoom: React.FC = () => {
                       className="btn button-primary w-100 mb-3"
                       disabled={name === ''}
                     >
-                      Join Audio Chat
+                      Join Tour Room
                     </button>
                   </form>
                 </>
@@ -238,13 +274,15 @@ const ChatRoom: React.FC = () => {
                                 ) : (
                                   <AiOutlineAudio />
                                 )}
-                                {participant.selected ? (
-                                  <AiOutlineEyeInvisible
-                                    onClick={() => console.log(this)}
-                                  />
-                                ) : (
-                                  <AiTwotoneEye onClick={() => console.log(this)} />
-                                )}
+                                  {participant.selected ? (
+                                    isGuide && <AiOutlineEyeInvisible
+                                      onClick={((e) => onClickSelectVideo(e, participant))}
+                                    />
+                                  ) : (
+                                    isGuide &&  <AiTwotoneEye
+                                      onClick={((e) => onClickSelectVideo(e, participant))}
+                                    />
+                                  )}
                               </li>
                             )
                           }
@@ -272,7 +310,7 @@ const ChatRoom: React.FC = () => {
                       className="btn btn-danger"
                       onClick={destroyJanusSession}
                     >
-                      Leave Chat
+                      Leave Tour
                     </button>
                   </div>
                 </>
@@ -289,6 +327,20 @@ const ChatRoom: React.FC = () => {
             </button>
           )}
           <audio ref={audioRef} className="rounded centered" autoPlay />
+          <button
+            type="button"
+            className="btn button-primary"
+            onClick={() => {console.log('List of publishers:');console.log(publishers)}}
+          >
+            Print Participants
+          </button>
+          <button
+            type="button"
+            className="btn button-primary"
+            onClick={() => {console.log('List of publishers:');console.log(publishers)}}
+          >
+            Print Publishers
+          </button>
         </div>
       </GridItem>
     </Grid>
