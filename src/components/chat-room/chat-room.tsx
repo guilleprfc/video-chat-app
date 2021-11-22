@@ -327,7 +327,7 @@ const ChatRoom: React.FC = () => {
             </button>
           )}
           <audio ref={audioRef} className="rounded centered" autoPlay />
-          <button
+          {/* <button
             type="button"
             className="btn button-primary"
             onClick={() => {console.log('List of publishers:');console.log(publishers)}}
@@ -340,7 +340,7 @@ const ChatRoom: React.FC = () => {
             onClick={() => {console.log('List of publishers:');console.log(publishers)}}
           >
             Print Publishers
-          </button>
+          </button> */}
         </div>
       </GridItem>
     </Grid>
