@@ -13,7 +13,7 @@ import {
 } from './janus.types'
 
 import Janus from '../../janus/janus' // new import
-import { Console } from 'console'
+
 // const Janus = require('../../janus/janus'); // old import
 
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -33,7 +33,7 @@ class JanusClient {
   videoRoomSubscriberPlugin: PluginHandle | undefined // Video Room plugin instance for subscribing to publishers
   AUDIO_ROOM_DEFAULT = 1234 // Default audio room
   VIDEO_ROOM_DEFAULT = 1234 // Default video room
-  id = 0 // Id that identify the user in Janus
+  id = 0 // Id that identifies the user in Janus
   participants: Participant[] = [] // Users connected in the audio chat
   publishers: Publisher[] = [] // Users publishing media via videoRoom
   audioElement: unknown
@@ -164,13 +164,11 @@ class JanusClient {
   }
 
   async attachSubscriberPlugin() {
-    console.log('- - - - - attaching subscriber plugin - - - - -')
     try {
       this.videoRoomSubscriberPlugin = await this.attachToVideoRoomSubscriber()
     } catch (e) {
       console.log('Error: ' + e)
     }
-    console.log('- - - - - attaching subscriber plugin END - - - - -')
   }
 
   /**
@@ -184,23 +182,10 @@ class JanusClient {
               ${this.videoRoomSubscriberPlugin.getPlugin()}, id=${this.videoRoomSubscriberPlugin.getId()})`)
           this.subscriberPluginattached = true
         } else {
-          console.log(
+          Janus.log(
             'Error, the videoroom plugin for subscriptions could not be attached'
           )
         }
-        // this.videoRoomSubscriberPlugin &&
-        //   this.videoRoomSubscriberPlugin.createOffer({
-        //     media: {
-        //       audioRecv: false,
-        //       videoRecv: false,
-        //       audioSend: false,
-        //       videoSend: true,
-        //     }, // Publishers are sendonly
-        //     success: this.onReceiveSDPVideoRoom.bind(this),
-        //     error: function (error) {
-        //       Janus.log('WebRTC error:', error)
-        //     },
-        //   })
         let message = {
           request: 'join',
           ptype: 'subscriber',
@@ -209,15 +194,12 @@ class JanusClient {
         }
         this.videoRoomSubscriberPlugin &&
           this.videoRoomSubscriberPlugin.send({ message })
-        console.log('- - - - - message to subscribe sent - - - - -')
       })
     } else {
       let message = {
         request: 'switch',
         feed: relatedPublisher.id,
       }
-      console.log('switching subscription:')
-      console.log(message)
       this.videoRoomSubscriberPlugin &&
         this.videoRoomSubscriberPlugin.send({ message })
     }
@@ -273,7 +255,7 @@ class JanusClient {
       this.client &&
         this.client.attach({
           plugin: VIDEOROOM_PLUGIN_NAME,
-          opaqueId, // TODO new id for video??
+          opaqueId,
           success: resolve,
           error: reject,
           iceState: this.onIceState.bind(this),
@@ -292,7 +274,7 @@ class JanusClient {
       this.client &&
         this.client.attach({
           plugin: VIDEOROOM_PLUGIN_NAME,
-          opaqueId, // TODO new id for video??
+          opaqueId,
           success: resolve,
           error: reject,
           iceState: this.onIceState.bind(this),
@@ -356,7 +338,6 @@ class JanusClient {
   }
 
   private onMessageVideo(message, jsep): void {
-    console.log('- - - - - onMessageVideo - - - - -')
     const { videoroom: msgType } = message
 
     if (msgType) {
@@ -379,7 +360,6 @@ class JanusClient {
       Janus.log('Handling SDP as well...', jsep)
       this.videoRoomPlugin && this.videoRoomPlugin.handleRemoteJsep({ jsep })
     }
-    console.log('- - - - - onMessageVideo END - - - - -')
   }
 
   private onMessageVideoSubscriber(message, jsep): void {
@@ -434,12 +414,9 @@ class JanusClient {
   private onLocalAudioStream(stream: MediaStream): void {
     Janus.log('::: Got a local audio stream :::')
     Janus.log(stream)
-    console.log('::: Got a local audio stream :::')
-    console.log(stream)
   }
 
   private onLocalVideoStream(stream: MediaStream): void {
-    console.log('- - - - - local video received - - - - -')
     Janus.log('::: Got a local video stream :::')
     Janus.log(stream)
     if (!this.userIsGuide) {
@@ -454,13 +431,11 @@ class JanusClient {
   }
 
   private onRemoteVideoStream(stream: unknown): void {
-    console.log('- - - - - onRemoteVideoStream - - - - -')
     Janus.log(' ::: Got a remote video stream :::')
     Janus.log(stream)
     if (this.userIsGuide) {
       Janus.attachMediaStream(this.videoElement, stream)
     }
-    console.log('- - - - - onRemoteVideoStream END - - - - -')
   }
 
   private onCleanUp(): void {
@@ -484,7 +459,6 @@ class JanusClient {
         this.onUser.next(this.user)
       }
       this.webrtcUp = true
-      console.log('Preparing to send offer via audiobridge')
       this.createOfferAudioBridge()
     }
 
@@ -500,10 +474,8 @@ class JanusClient {
    * @param message // Message received
    */
   private onJoinVideo(message: MessageVideoJoin): void {
-    console.log('- - - - - onJoinVideo - - - - -')
     const { id, publishers, room } = message
     Janus.log(`Successfully joined video room ${room} with ID ${this.id}`)
-    console.log(`Successfully joined video room ${room} with ID ${this.id}`)
 
     if (!this.webrtcUp) {
       if (this.user) {
@@ -512,15 +484,13 @@ class JanusClient {
       }
       this.webrtcUp = true
     }
-
-    console.log('Preparing to become a publisher')
+    // After joining the room, we publish our own feed
     this.publishOwnFeed()
 
     // Add new publishers to the publisher list
     if (publishers && publishers.length > 0) {
       this.addPublishers(publishers as Publisher[])
     }
-    console.log('- - - - - onJoinVideo END - - - - -')
   }
 
   /**
@@ -562,20 +532,18 @@ class JanusClient {
    * @param message // Message received
    */
   private onVideoEvent(message): void {
-    console.log('- - - - - onVideoEvent - - - - -')
     const { publishers, error, leaving } = message
     Janus.log(`Received a video event ${message}`)
-    console.log(message)
 
     if (message['publishers'] !== undefined && message['publishers'] !== null) {
-      console.log('new publishers!')
+      Janus.log('new publishers!')
       let list = message['publishers']
       for (let f in list) {
         let id = list[f]['id']
         let display = list[f]['display']
         let audio = list[f]['audio_codec']
         let video = list[f]['video_codec']
-        console.log(
+        Janus.log(
           '  >> [' +
             id +
             '] ' +
@@ -601,7 +569,6 @@ class JanusClient {
     if (leaving) {
       this.removePublisher(leaving)
     }
-    console.log('- - - - - onVideoEvent END - - - - -')
   }
 
   /**
@@ -611,17 +578,7 @@ class JanusClient {
    * @param message // Message received
    */
   private onVideoAttached(message, jsep): void {
-    console.log('- - - - - onVideoAttached - - - - -')
-    const { streams } = message
     Janus.log(`Received a media attachment ${message}`)
-    console.log(`Received a media attachment ${message}`)
-    console.log(message)
-
-    // if (streams && streams.length > 0) {
-    //   Janus.attachMediaStream(this.videoElement, streams[0])
-    // }
-
-    console.log('- - - - - onVideoAttached END - - - - -')
   }
 
   /**
@@ -631,15 +588,12 @@ class JanusClient {
    * @param message // Message received
    */
   private onVideoUpdate(message): void {
-    console.log('- - - - - onVideoUpdate - - - - -')
     const { streams } = message
     Janus.log(`Received an update ${message}`)
-    console.log(`Received an update ${message}`)
 
     if (streams && streams.length > 0) {
       Janus.attachMediaStream(this.videoElement, streams[0])
     }
-    console.log('- - - - - onVideoUpdate END - - - - -')
   }
 
   /**
@@ -681,7 +635,6 @@ class JanusClient {
   }
 
   private publishOwnFeed(): void {
-    console.log('- - - - - publishOwnFeed - - - - -')
     // Publish our stream
     this.videoRoomPlugin &&
       this.videoRoomPlugin.createOffer({
@@ -696,27 +649,22 @@ class JanusClient {
           Janus.log('WebRTC error:', error)
         },
       })
-    console.log('- - - - - publishOwnFeed END - - - - -')
   }
 
   private onReceiveSDPVideoRoom(jsep): void {
-    console.log('- - - - - onReceiveSDPVideoRoom - - - - -')
     Janus.log('Got publisher SDP!')
     Janus.log(jsep)
     const publish = { request: 'configure', audio: false, video: true }
     this.videoRoomPlugin &&
       this.videoRoomPlugin.send({ message: publish, jsep: jsep })
-    console.log('- - - - - onReceiveSDPVideoRoom END - - - - -')
   }
 
   private onReceiveSDPVideoRoomSubscriber(jsep): void {
-    console.log('- - - - - onReceiveSDPVideoRoomSubscriber - - - - -')
     Janus.log('Got publisher SDP!')
     Janus.log(jsep)
     const request = { request: 'start', room: 1234 }
     this.videoRoomSubscriberPlugin &&
       this.videoRoomSubscriberPlugin.send({ message: request, jsep: jsep })
-    console.log('- - - - - onReceiveSDPVideoRoomSubscriber END - - - - -')
   }
 
   private addParticipants(participants: Participant[]): void {

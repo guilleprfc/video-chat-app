@@ -182,14 +182,9 @@ const ChatRoom: React.FC = () => {
 
   const onClickSelectVideo = (event: React.MouseEvent<SVGElement>, participant: Participant) => {
     event.preventDefault()
-    console.log('------------------------------------------------------------------------------------------------------------------')
-    console.log('------------------------------------------------------------------------------------------------------------------')
-    console.log('------------------------------------------------------------------------------------------------------------------')
     setIsSelected(!isSelected)
     const relatedPublisher = publishers.find((publisher) => participant.display === publisher.display)
-    console.log(relatedPublisher)
     if (relatedPublisher) {
-      console.log('Selected participant\'s publisher id: ' + relatedPublisher.id)
       if (state && state.janusClient)
         state.janusClient.selectVideo(relatedPublisher)
     } else {
