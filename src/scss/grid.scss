@@ -5,46 +5,19 @@
   min-height: 100vh;
   display: grid;
   padding: 7vh 1vw 1vh 1vw;
-  grid-template-columns: [col-0] 75vw [col-1] 20vw ;
-  grid-template-rows: [row-0] 5vh [row-1] 5vh [row-2] 30vh [row-3] 20vh [row-4] 20vh;
+  grid-template-columns: [col-0] 20vw [col-1] 75vw ;
+  grid-template-rows: [row-0] 80vh [row-1] 20vh;
   gap: 10px 10px;
 
   & > .item {
     &__chat {
-      grid-column: col-1;
-      grid-row: row-0 / row-4;
-    }
-  
-    &__graph {
       grid-column: col-0;
-      grid-row: row-0 / row-4;
-    }
-  
-    &__details {
-      grid-column: col-3 / col-4;
       grid-row: row-0 / row-1;
     }
   
-    &__image {
-      grid-column: col-3 / col-4;
-      grid-row: row-1 / row-2;
-    }
-  
-    &__clip {
-      grid-column: col-2 / col-4;
-      grid-row: row-2 / row-3;
-      display: flex;
-  
-      & > video {
-        align-self: center;
-      }
-    }
-  
-    &__cameras {
-      grid-column: col-0 / col-2;
-      grid-row: row-2 / row-3;
-      display: flex;
-      justify-content: space-around;
+    &__camera {
+      grid-column: col-1;
+      grid-row: row-0 / row-1;
     }
   }
 }
@@ -66,48 +39,9 @@
       margin-top: 5vh;
     }
   
-    &__graph {
+    &__camera {
       min-height: 50vh;
       margin-top: 5vh;
-    }
-  
-    &__details {
-      min-height: 40vh;
-      margin-top: 5vh;
-    }
-  
-    &__image {
-      min-height: 50vh;
-      margin-top: 5vh;
-    }
-  
-    &__clip {
-      min-height: 80vh;
-      margin-top: 5vh;
-    }
-  
-    &__cameras {
-      margin-top: 5vh;
-      min-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-  }
-}
-
-.grid-bitcoin {
-  box-sizing: border-box;
-  min-height: 100vh;
-  display: grid;
-  padding: 7vh 1vw 1vh 1vw;
-  grid-template-columns: [col-0] 25vw [col-1] 1fr [col-2];
-  grid-template-rows: [row-0] 1fr [row-1] 1fr [row-2];
-  gap: 10px 10px;
-
-  & > .item {
-    &__graph {
-      grid-column: col-1 / col-2;
-      grid-row: row-0 / row-2;
     }
   }
 }

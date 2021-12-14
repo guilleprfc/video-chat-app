@@ -26,24 +26,31 @@
     }
   }
 
-  &__participants {
-    overflow-y: auto;
-    max-height: 75%;
+  &__room {
+    .participants {
+      overflow-y: auto;
+      max-height: 75%;
 
-    &-item {
-      position: relative;
-      display: block;
-      color: $color-primary;
-      padding: 0.5rem 0;
-      text-decoration: none;
-      border: 1px solid rgba(0, 0, 0, 0.125);
+      .participant {
+        position: relative;
+        display: block;
+        color: $color-primary;
+        padding: 0.5rem 0;
+        text-decoration: none;
+        border: 1px solid rgba(0, 0, 0, 0.125);
+      }
+      svg {
+        float: right;
+        padding-top: 4px;
+        margin-left: 3px;
+        cursor: pointer;
+      }
     }
-    svg {
-      float: right;
-      padding-top: 4px;
-      margin-left: 3px;
-      cursor: pointer;
-    }
+  }
+
+  .loader-container {
+    margin: auto;
+    text-align: center;
   }
 }
 
@@ -73,6 +80,97 @@ hr {
   display: block;
 }
 
+table {
+  width: 100%;
+}
+.c-multi-drag-table {
+  &.is-dragging table {
+    border: 1px solid #4285f4;
+  }
+  .ant-col {
+    position: relative;
+  }
+  .ant-col:first-child:after {
+    display: block;
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: #e2e2e2;
+    z-index: 1;
+  }
+  .inner-col {
+    position: relative;
+    height: 100%;
+    /* background: #fff; */
+    /* border: 1px solid #f0f0f0; */
+    padding: 10px;
+    /* z-index: 2; */
+  }
+  .delete-icon {
+    float:right;
+  }
+  .ant-table-thead > tr > th,
+  .ant-table-tbody > tr > td,
+  .ant-table tfoot > tr > th,
+  .ant-table tfoot > tr > td {
+    padding: 6px 16px;
+  }
+  .ant-table-thead > tr > th {
+    padding-left: 2px;
+  }
+  .ant-table-tbody > tr.ant-table-placeholder > td,
+  .ant-table-tbody > tr.ant-table-placeholder:hover > td {
+    background: transparent;
+  }
+  .ant-col:first-child:after {
+    background: none
+  }
+  .ant-table-tbody.is-dragging-over > tr.ant-table-placeholder {
+    background: #deebff !important;
+  }
+  .ant-table-tbody > tr.row-item.row-selected {
+    background: #deebff;
+  }
+  .ant-table-tbody > tr.row-item.row-dragging {
+    display: table;
+    color: #fff;
+    background: #4285f4;
+    // border: 1px solid #f0f0f0;
+  }
+  .ant-table-tbody > tr.row-item.row-dragging > td {
+    border-bottom: 0;
+  }
+  .ant-table-tbody > tr.row-item.row-ghosting {
+    opacity: 0.5;
+  }
+  .ant-empty-description {
+    display: none;
+  }
+  .ant-table-cell {
+    .room-name {
+      font-size: 1.9vmin;
+    }
+    svg.mute-icon {
+      font-size: 2vmin;
+      cursor: pointer;
+    }
+    svg.delete-icon {
+      font-size: 2vmin;
+      cursor: pointer;
+    }
+    svg.room-icon {
+      font-size: 2.4vmin;
+      margin-right: 0.18rem;
+    }
+    svg > path {
+      pointer-events: none;
+    }
+  }
+}
+
 @media (max-width: 900px) {
   .chat {
     &__buttons {
@@ -85,7 +183,7 @@ hr {
 
 @media (max-width: 750px) and (orientation: landscape) {
   .btn-join {
-    font-size: 2.6vmin
+    font-size: 2.6vmin;
   }
 
   .chat {

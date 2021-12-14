@@ -1,0 +1,86 @@
+.home {
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  height: 100vh;
+
+  &__title {
+    color: white;
+    display: flex;
+    width: 100%;
+    justify-content: center;
+  }
+
+  &__buttons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    width: 100%;
+  
+    & > a {
+      text-decoration: none;
+    }
+  }
+}
+
+.btn-picture {
+  height: 25rem;
+  width: 30rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  z-index: 3;
+  color: white;
+  transition: linear 0.4s;
+
+  &-guide {
+    &:before {
+      background-image: url('../../assets/img/guide-picture.jpg'), linear-gradient(to bottom left, #08436C, #08B4D7);
+      opacity: 0.2;
+      background-repeat: no-repeat;
+      background-clip: padding-box;
+      -webkit-background-size: cover;
+      -moz-background-size: cover;
+      -o-background-size: cover;
+      background-size: cover;
+    }
+  }
+
+  &-user {
+    &:before {
+      background-image: url('../../assets/img/user-picture.jpg'), linear-gradient(to bottom left, #08436C, #08B4D7);
+      opacity: 0.2;
+      background-repeat: no-repeat;
+      background-clip: padding-box;
+      -webkit-background-size: cover;
+      -moz-background-size: cover;
+      -o-background-size: cover;
+      background-size: cover;
+    }
+  }
+
+  &:hover {
+    transform: scale(1.2);
+  }
+}
+
+@media (max-width: 750px) {
+  .home-container {
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+  }
+
+  .btn-picture {
+    height: 10rem;
+    width: 10rem;
+
+    & > h2 {
+      font-size: 1rem;
+    }
+  }
+}

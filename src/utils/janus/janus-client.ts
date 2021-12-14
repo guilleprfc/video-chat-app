@@ -3,18 +3,25 @@ import {
   JoinAudioOptions,
   JoinVideoOptions,
   MessageAudioJoin,
+  MessageAudioSuccess,
+  MessageAudioParticipants,
   MessageVideoJoin,
+  MessageVideoSuccess,
+  MessageVideoParticipants,
   Participant,
+  AudioParticipant,
+  VideoParticipant,
   Publisher,
   PluginHandle,
   Janus as JanusClass,
   MessagesType,
   MessageTalkEvent,
+  VideoRoom,
+  AudioRoom,
+  Room,
 } from './janus.types'
 
 import Janus from '../../janus/janus' // new import
-
-// const Janus = require('../../janus/janus'); // old import
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 
@@ -30,19 +37,24 @@ class JanusClient {
   client: JanusClass | undefined // Instance of Janus
   audioBridgePlugin: PluginHandle | undefined // Audio Bridge plugin instance
   videoRoomPlugin: PluginHandle | undefined // Video Room plugin instance
-  videoRoomSubscriberPlugin: PluginHandle | undefined // Video Room plugin instance for subscribing to publishers
-  AUDIO_ROOM_DEFAULT = 1234 // Default audio room
-  VIDEO_ROOM_DEFAULT = 1234 // Default video room
+  videoRoomSubscriberPlugin: PluginHandle | undefined // Video Room plugin instance for subscribing to publishers (Guides)
+
+  AUDIO_ROOM_DEFAULT = 1000000 // Default audio room
+  VIDEO_ROOM_DEFAULT = 1000000 // Default video room
+
   id = 0 // Id that identifies the user in Janus
+
+  rooms: Room[] = [] // Existing rooms
   participants: Participant[] = [] // Users connected in the audio chat
   publishers: Publisher[] = [] // Users publishing media via videoRoom
-  audioElement: unknown
-  videoElement: unknown
+
   userIsGuide: boolean = false
   subscriberPluginattached: boolean = false
   guideIsSubscriber: boolean = false
   guideSubscribedTo: string = ''
   user: Participant | undefined
+  audioElement: unknown
+  videoElement: unknown
 
   onParticipants = new BehaviorSubject<Participant[]>([]) // Participants Subject
   onPublishers = new BehaviorSubject<Publisher[]>([]) // Participants Subject
@@ -71,34 +83,23 @@ class JanusClient {
   }
 
   /**
-   * Connect to Janus, create the session and attach to AudioBridge and VideoRoom
+   * With the Janus instance initialized, this for creating a session and
+   * attaching the required plugins.
    */
-  connectToJanus(): Promise<void> {
+  connectToJanus(): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      if (this.initJanus) {
-        this.createSession()
-          .catch(reject)
-          .then(async () => {
-            try {
-              this.audioBridgePlugin = await this.attachToAudioBridge()
-              Janus.log(`Plugin attached! ( 
-                ${this.audioBridgePlugin.getPlugin()}, id=${this.audioBridgePlugin.getId()})`)
-              resolve()
-            } catch (error) {
-              reject(error)
-            }
-            try {
-              this.videoRoomPlugin = await this.attachToVideoRoom()
-              Janus.log(`Plugin attached! ( 
-                ${this.videoRoomPlugin.getPlugin()}, id=${this.videoRoomPlugin.getId()})`)
-              resolve()
-            } catch (error) {
-              reject(error)
-            }
-          })
-      } else {
-        reject(new Error())
-      }
+      this.createSession()
+        .then(async () => {
+          await this.attachPlugins()
+        })
+        .then(() => {
+          console.log('All plugins attached, connected to Janus.')
+          resolve(true)
+        })
+        .catch(() => {
+          console.log('There has been an error during the plugin attachment.')
+          reject(false)
+        })
     })
   }
 
@@ -108,75 +109,152 @@ class JanusClient {
    * @param options User audio options
    * @param room (Optional) Number room to join. By default is 1234
    */
-  joinAudioRoom(options: JoinAudioOptions, room?: number): void {
-    this.audioOptions = options
-    const roomToJoin = room || this.AUDIO_ROOM_DEFAULT
-    const { display, muted } = options
-    this.user = {
-      id: 0,
-      display,
-      muted,
-      setup: true,
-    }
-    const message = {
-      request: 'join',
-      room: roomToJoin,
-      display,
-    }
-    this.audioBridgePlugin && this.audioBridgePlugin.send({ message })
-  }
-
-  /**
-   * Function that requests Janus to mute/unmute the audio coming from audioBridge.
-   */
-  mute(muted: boolean): void {
-    if (this.webrtcUp) {
-      const message = {
-        request: 'configure',
-        muted,
+  joinAudioRoom(options: JoinAudioOptions, room?: number): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      try {
+        this.audioOptions = options
+        const roomToJoin = room || this.AUDIO_ROOM_DEFAULT
+        const { display, muted } = options
+        this.user = {
+          audioId: 0,
+          display,
+          muted,
+          setup: true,
+        }
+        const message = {
+          request: 'join',
+          room: roomToJoin,
+          display,
+          muted,
+        }
+        this.audioBridgePlugin &&
+          this.audioBridgePlugin.send({
+            message,
+            success: () => {
+              console.log('Joined audiobridge room', roomToJoin)
+              resolve(true)
+            },
+          })
+      } catch (error) {
+        reject(false)
       }
-      this.audioBridgePlugin && this.audioBridgePlugin.send({ message })
-    }
+    })
   }
 
   /**
    * VIDEOROOM plugin
-   * Join a user in a room to allow audio chat
+   * Join a user in a video room
    * @param options User audio options
    * @param room (Optional) Number room to join. By default is 1234
    */
-  joinVideoRoom(options: JoinVideoOptions, room?: number): void {
-    this.videoOptions = options
-    const roomToJoin = room || this.VIDEO_ROOM_DEFAULT
-    const { display, ptype } = options
-    this.user = {
-      id: 0,
-      display,
-      setup: true,
-    }
-    const message = {
-      request: 'join',
-      display,
-      ptype,
-      room: roomToJoin,
-    }
-    this.videoRoomPlugin && this.videoRoomPlugin.send({ message })
+  joinVideoRoom(options: JoinVideoOptions, room?: number): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      try {
+        this.videoOptions = options
+        const roomToJoin = room || this.VIDEO_ROOM_DEFAULT
+        const { display, ptype } = options
+        this.user = {
+          videoId: 0,
+          display,
+          setup: true,
+        }
+        const message = {
+          request: 'join',
+          display,
+          ptype,
+          room: roomToJoin,
+        }
+        this.videoRoomPlugin &&
+          this.videoRoomPlugin.send({
+            message,
+            success: () => {
+              console.log('Joined videoroom room', roomToJoin)
+              resolve(true)
+            },
+          })
+      } catch (error) {
+        reject(false)
+      }
+    })
   }
 
-  async attachSubscriberPlugin() {
-    try {
-      this.videoRoomSubscriberPlugin = await this.attachToVideoRoomSubscriber()
-    } catch (e) {
-      console.log('Error: ' + e)
-    }
+  /**
+   * AUDIOBRIDGE plugin
+   * Change to another audioBridge room
+   * @param room (Optional) Number room to join. By default is 1234
+   */
+  changeAudioRoom(room: number, display: string): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      try {
+        const roomToJoin = room || this.AUDIO_ROOM_DEFAULT
+        this.user = {
+          audioId: 0,
+          display,
+          muted: true,
+          setup: true,
+        }
+        const message = {
+          request: 'changeroom',
+          room: roomToJoin,
+          display,
+          muted: true,
+        }
+        this.audioBridgePlugin &&
+          this.audioBridgePlugin.send({
+            message,
+            success: () => {
+              console.log('Changed audiobridge room', roomToJoin)
+              resolve(true)
+            },
+          })
+      } catch (error) {
+        reject(false)
+      }
+    })
+  }
+
+  /**
+   * AUDIOBRIDGE plugin
+   * Change to another audioBridge room
+   * @param room (Optional) Number room to join. By default is 1234
+   */
+   changeVideoRoom(sourceRoom: number, destinationRoom: number, display: string): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      try {
+        const roomToJoin = destinationRoom || this.VIDEO_ROOM_DEFAULT
+        this.user = {
+          videoId: 0,
+          display,
+          setup: true,
+        }
+        const message = {
+          request: 'join',
+          display,
+          ptype: 'publisher',
+          room: roomToJoin,
+        }
+        this.videoRoomPlugin &&
+          this.videoRoomPlugin.send({
+            message,
+            success: () => {
+              console.log('Joined videoroom room', roomToJoin)
+              resolve(true)
+            },
+          })
+      } catch (error) {
+        reject(false)
+      }
+    }).then(
+      
+    )
   }
 
   /**
    * Function that requests Janus to send or stop sending the video from videoRoom.
    */
-  selectVideo(relatedPublisher: Publisher): void {
+  subscribeToPublisher(relatedPublisher: Publisher): void {
     if (!this.subscriberPluginattached) {
-      this.attachSubscriberPlugin().then(() => {
+      this.attachVideoSubscriberPlugin().then(() => {
         if (this.videoRoomSubscriberPlugin) {
           Janus.log(`Plugin attached! ( 
               ${this.videoRoomSubscriberPlugin.getPlugin()}, id=${this.videoRoomSubscriberPlugin.getId()})`)
@@ -205,6 +283,25 @@ class JanusClient {
     }
   }
 
+  /**
+   * Function that requests Janus to mute/unmute the audio coming from audioBridge.
+   */
+  mute(muted: boolean): void {
+    if (this.webrtcUp) {
+      const message = {
+        request: 'configure',
+        muted,
+      }
+      this.audioBridgePlugin &&
+        this.audioBridgePlugin.send({
+          message,
+          success: (result) => {
+            console.log('user muted', muted)
+          },
+        })
+    }
+  }
+
   setAudio(audioElement: unknown): void {
     this.audioElement = audioElement
   }
@@ -217,18 +314,373 @@ class JanusClient {
     this.userIsGuide = isGuide
   }
 
-  private async createSession(): Promise<void> {
-    return new Promise((resolve, reject) => {
+  async getChatInfo(): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
       try {
-        this.client = new Janus({
-          server: this.url,
-          success: resolve,
-          error: reject,
-        })
+        // Rooms
+        const audioRooms: Array<AudioRoom> = await this.getAudioRoomsList()
+        const videoRooms: Array<VideoRoom> = await this.getVideoRoomsList()
+        // Arrange results to group rooms by Id
+        const rooms = new Array<Room>()
+        let index = -1
+        for (let i = 0; i < audioRooms.length; i++) {
+          for (let j = 0; j < rooms.length; j++) {
+            if (rooms[j].roomId === audioRooms[i].room) index = j
+          }
+          if (index >= 0) {
+            rooms[index].audioRoom = audioRooms[i]
+          } else {
+            rooms.push({
+              roomId: audioRooms[i].room,
+              description: audioRooms[i].description,
+              audioRoom: audioRooms[i],
+              videoRoom: undefined,
+            })
+          }
+          index = -1
+        }
+        for (let i = 0; i < videoRooms.length; i++) {
+          for (let j = 0; j < rooms.length; j++) {
+            if (rooms[j].roomId === videoRooms[i].room) index = j
+          }
+          if (index >= 0) {
+            rooms[index].videoRoom = videoRooms[i]
+          } else {
+            rooms.push({
+              roomId: videoRooms[i].room,
+              description: videoRooms[i].description,
+              audioRoom: undefined,
+              videoRoom: videoRooms[i],
+            })
+          }
+          index = -1
+        }
+
+        this.rooms = rooms
+
+        // Participants
+        await this.loadParticipants()
+
+        // Create one participant list
+        let participants = new Array<Participant>()
+        let audioParticipants = new Array<AudioParticipant>()
+        let videoParticipants = new Array<VideoParticipant>()
+        for (let i = 0; i < rooms.length; i++) {
+          participants = new Array<Participant>()
+          // Audio participants
+          if (rooms[i].audioRoom && rooms[i].audioRoom?.participants) {
+            audioParticipants = rooms[i].audioRoom
+              ?.participants as Array<AudioParticipant>
+            index = -1
+            for (let a = 0; a < audioParticipants.length; a++) {
+              index = participants.findIndex(
+                (p) => p.display === audioParticipants[a].display
+              )
+              if (index >= 0) {
+                participants[index].audioId = audioParticipants[a].id
+                participants[index].setup = audioParticipants[a].setup
+                participants[index].muted = audioParticipants[a].muted
+              } else {
+                participants.push({
+                  audioId: audioParticipants[a].id,
+                  display: audioParticipants[a].display,
+                  setup: audioParticipants[a].setup,
+                  muted: audioParticipants[a].muted,
+                } as Participant)
+              }
+            }
+          }
+          // Video participants
+          if (rooms[i].videoRoom && rooms[i].videoRoom?.participants) {
+            videoParticipants = rooms[i].videoRoom
+              ?.participants as Array<VideoParticipant>
+            index = -1
+            for (let v = 0; v < videoParticipants.length; v++) {
+              index = participants.findIndex(
+                (p) => p.display === videoParticipants[v].display
+              )
+              if (index >= 0) {
+                participants[index].videoId = videoParticipants[v].id
+                participants[index].publisher = videoParticipants[v].publisher
+              } else {
+                participants.push({
+                  videoId: videoParticipants[v].id,
+                  display: videoParticipants[v].display,
+                  publisher: videoParticipants[v].publisher,
+                } as Participant)
+              }
+            }
+          }
+          rooms[i].participants = participants
+        }
+        resolve()
+      } catch (error) {
+        reject('Could not get the chat status info: ' + error)
+      }
+    })
+  }
+
+  async createRoom(description, roomId): Promise<any[]> {
+    return Promise.all([
+      this.createAudioRoom(description, roomId),
+      this.createVideoRoom(description, roomId),
+    ])
+  }
+
+  async destroyRoom(roomId): Promise<any[]> {
+    return Promise.all([
+      this.destroyAudioRoom(roomId),
+      this.destroyVideoRoom(roomId),
+    ])
+  }
+
+  private async createAudioRoom(description, roomId): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.audioBridgePlugin) {
+          this.audioBridgePlugin.send({
+            message: { request: 'create', room: roomId, description },
+            success: (result) => {
+              // console.log('audio room ' + roomId + ' created', result)
+              resolve()
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error creating an audioBridge room: ' + error)
+      }
+    })
+  }
+
+  private async createVideoRoom(description, roomId): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.videoRoomPlugin) {
+          this.videoRoomPlugin.send({
+            message: { request: 'create', room: roomId, description },
+            success: (result) => {
+              // console.log('video room ' + roomId + ' created', result)
+              resolve()
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error creating a videoRoom room: ' + error)
+      }
+    })
+  }
+
+  private async destroyAudioRoom(roomId): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.audioBridgePlugin) {
+          this.audioBridgePlugin.send({
+            message: { request: 'destroy', room: parseInt(roomId) },
+            success: (result) => {
+              console.log('audio room ' + roomId + ' destroyed', result)
+              resolve()
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error destroying an audioBridge room: ' + error)
+      }
+    })
+  }
+
+  private async destroyVideoRoom(roomId): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.videoRoomPlugin) {
+          this.videoRoomPlugin.send({
+            message: { request: 'destroy', room: parseInt(roomId) },
+            success: (result) => {
+              console.log('video room ' + roomId + ' destroyed', result)
+              resolve()
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error destroying a videoRoom room: ' + error)
+      }
+    })
+  }
+
+  private getAudioRoomsList(): Promise<AudioRoom[]> {
+    return new Promise<AudioRoom[]>((resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.audioBridgePlugin) {
+          this.audioBridgePlugin.send({
+            message: { request: 'list' },
+            success: (result) => {
+              // console.log('Audio rooms fetched from Janus: ',result)
+              let roomList = (result as MessageAudioSuccess).list as AudioRoom[]
+              let rooms = new Array<AudioRoom>()
+              for (let i = 0; i < roomList.length; i++) {
+                if (roomList[i].room !== 1234 && roomList[i].room !== 5678)
+                  rooms.push(roomList[i])
+              }
+              resolve(rooms)
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error getting audio rooms list: ' + error)
+      }
+    })
+  }
+
+  private getVideoRoomsList(): Promise<VideoRoom[]> {
+    return new Promise<VideoRoom[]>((resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.videoRoomPlugin) {
+          this.videoRoomPlugin.send({
+            message: { request: 'list' },
+            success: (result) => {
+              // console.log('Video rooms fetched from Janus:', result)
+              let roomList = (result as MessageVideoSuccess).list as VideoRoom[]
+              let rooms = new Array<VideoRoom>()
+              for (let i = 0; i < roomList.length; i++) {
+                if (roomList[i].room !== 1234 && roomList[i].room !== 5678)
+                  rooms.push(roomList[i])
+              }
+              resolve(rooms)
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error getting video rooms list: ' + error)
+      }
+    })
+  }
+
+  private async loadParticipants(): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        for (let i = 0; i < this.rooms.length; i++) {
+          const audioParticipants: Array<AudioParticipant> =
+            await this.getAudioParticipantsList(this.rooms[i].roomId)
+          const videoParticipants: Array<VideoParticipant> =
+            await this.getVideoParticipantsList(this.rooms[i].roomId)
+          this.rooms[i].audioRoom!.participants = audioParticipants
+          this.rooms[i].videoRoom!.participants = videoParticipants
+        }
+        resolve()
       } catch (error) {
         reject(error)
       }
     })
+  }
+
+  private getVideoParticipantsList(roomId): Promise<Array<VideoParticipant>> {
+    return new Promise<Array<VideoParticipant>>((resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.videoRoomPlugin) {
+          this.videoRoomPlugin.send({
+            message: { request: 'listparticipants', room: roomId },
+            success: (result) => {
+              this.participants = (result as MessageVideoParticipants)
+                .participants as Array<VideoParticipant>
+              resolve(
+                (result as MessageVideoParticipants)
+                  .participants as Array<VideoParticipant>
+              )
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error retrieving video participants: ' + error)
+      }
+    })
+  }
+
+  private getAudioParticipantsList(roomId): Promise<Array<AudioParticipant>> {
+    return new Promise<Array<AudioParticipant>>((resolve, reject) => {
+      try {
+        // Send the request to Janus
+        if (this.audioBridgePlugin) {
+          this.audioBridgePlugin.send({
+            message: { request: 'listparticipants', room: roomId },
+            success: (result) => {
+              this.participants = (result as MessageAudioParticipants)
+                .participants as Array<AudioParticipant>
+              resolve(
+                (result as MessageAudioParticipants)
+                  .participants as Array<AudioParticipant>
+              )
+            },
+          })
+        }
+      } catch (error) {
+        reject('Error retrieving audio participants: ' + error)
+      }
+    })
+  }
+
+  private createSession(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.initJanus) {
+        try {
+          this.client = new Janus({
+            server: this.url,
+            success: resolve,
+            error: reject,
+          })
+        } catch (error) {
+          reject(error)
+        }
+      } else {
+        reject(new Error('Could not initialize Janus'))
+      }
+    })
+  }
+
+  private attachPlugins(): Promise<any[]> {
+    return Promise.all([
+      this.attachAudioBridgePlugin(),
+      this.attachVideoRoomPlugin(),
+    ])
+  }
+
+  private attachAudioBridgePlugin(): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        this.audioBridgePlugin = await this.attachToAudioBridge()
+        Janus.log(`Plugin attached! ( 
+        ${this.audioBridgePlugin.getPlugin()}, id=${this.audioBridgePlugin.getId()})`)
+        resolve()
+      } catch (error) {
+        reject('Could not attach audioBridge plugin: ' + error)
+      }
+    })
+  }
+
+  private attachVideoRoomPlugin(): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        this.videoRoomPlugin = await this.attachToVideoRoom()
+        Janus.log(`Plugin attached! (
+          ${this.videoRoomPlugin.getPlugin()}, id=${this.videoRoomPlugin.getId()})`)
+        resolve()
+      } catch (error) {
+        reject('Could not attach videoRoom plugin: ' + error)
+      }
+    })
+  }
+
+  private async attachVideoSubscriberPlugin() {
+    try {
+      this.videoRoomSubscriberPlugin = await this.attachToVideoRoomSubscriber()
+    } catch (e) {
+      console.log('Error: ' + e)
+    }
   }
 
   private attachToAudioBridge(): Promise<PluginHandle> {
@@ -452,10 +904,12 @@ class JanusClient {
   private onJoinAudio(message: MessageAudioJoin): void {
     const { id, participants, room } = message
     Janus.log(`Successfully joined audio room ${room} with ID ${this.id}`)
-
+    console.log(
+      `User with ID ${this.id} successfully joined audio room ${room}`
+    )
     if (!this.webrtcUp) {
       if (this.user) {
-        this.user.id = id
+        this.user.audioId = id
         this.onUser.next(this.user)
       }
       this.webrtcUp = true
@@ -463,7 +917,7 @@ class JanusClient {
     }
 
     if (participants && participants.length > 0) {
-      this.addParticipants(participants as Participant[])
+      this.addParticipants(room, participants as Array<AudioParticipant>)
     }
   }
 
@@ -476,20 +930,22 @@ class JanusClient {
   private onJoinVideo(message: MessageVideoJoin): void {
     const { id, publishers, room } = message
     Janus.log(`Successfully joined video room ${room} with ID ${this.id}`)
-
+    console.log(
+      `User with ID ${this.id} successfully joined video room ${room}`
+    )
     if (!this.webrtcUp) {
       if (this.user) {
-        this.user.id = id
+        this.user.audioId = id
         this.onUser.next(this.user)
       }
       this.webrtcUp = true
     }
     // After joining the room, we publish our own feed
-    this.publishOwnFeed()
+    this.createOfferVideoRoom()
 
     // Add new publishers to the publisher list
     if (publishers && publishers.length > 0) {
-      this.addPublishers(publishers as Publisher[])
+      this.addPublishers(room, publishers as Array<Publisher>)
     }
   }
 
@@ -504,16 +960,15 @@ class JanusClient {
 
   /**
    * AUDIOBRIDGE plugin
-   * When it receives a message from Janus with event 'event'
-   * The message is received when the room has been destroyed
+   * When it receives a message from Janus with an event from audioBridge
    * @param message // Message received
    */
   private onAudioEvent(message): void {
-    const { participants, error, leaving } = message
+    const { participants, error, leaving, room } = message
     Janus.log(`Received an audio event ${message}`)
 
     if (participants && participants.length > 0) {
-      this.addParticipants(participants as Participant[])
+      this.addParticipants(room, participants as Array<AudioParticipant>)
     }
 
     if (error) {
@@ -527,12 +982,11 @@ class JanusClient {
 
   /**
    * VIDEOROOM plugin
-   * When it receives a message from Janus with event 'event'
-   * The message is received when the room has been destroyed
+   * When it receives a message from Janus with an event from videoRoom
    * @param message // Message received
    */
   private onVideoEvent(message): void {
-    const { publishers, error, leaving } = message
+    const { publishers, error, leaving, room } = message
     Janus.log(`Received a video event ${message}`)
 
     if (message['publishers'] !== undefined && message['publishers'] !== null) {
@@ -559,7 +1013,7 @@ class JanusClient {
     }
 
     if (publishers && publishers.length > 0) {
-      this.addPublishers(publishers as Publisher[])
+      this.addPublishers(room, publishers as Array<Publisher>)
     }
 
     if (error) {
@@ -634,29 +1088,19 @@ class JanusClient {
     this.audioBridgePlugin && this.audioBridgePlugin.send({ message, jsep })
   }
 
-  private publishOwnFeed(): void {
-    // Publish our stream
+  private createOfferVideoRoom(): void {
     this.videoRoomPlugin &&
       this.videoRoomPlugin.createOffer({
-        media: {
-          audioRecv: false,
-          videoRecv: false,
-          audioSend: false,
-          videoSend: true,
-        }, // Publishers are sendonly
+        media: { videoSend: true }, // Publishers are sendonly
         success: this.onReceiveSDPVideoRoom.bind(this),
-        error: function (error) {
-          Janus.log('WebRTC error:', error)
-        },
+        error: console.error,
       })
   }
 
   private onReceiveSDPVideoRoom(jsep): void {
-    Janus.log('Got publisher SDP!')
-    Janus.log(jsep)
-    const publish = { request: 'configure', audio: false, video: true }
+    const message = { request: 'configure', audio: false, video: true }
     this.videoRoomPlugin &&
-      this.videoRoomPlugin.send({ message: publish, jsep: jsep })
+      this.videoRoomPlugin.send({ message: message, jsep: jsep })
   }
 
   private onReceiveSDPVideoRoomSubscriber(jsep): void {
@@ -667,16 +1111,18 @@ class JanusClient {
       this.videoRoomSubscriberPlugin.send({ message: request, jsep: jsep })
   }
 
-  private addParticipants(participants: Participant[]): void {
+  private addParticipants(roomId: number, participants): void {
     participants.forEach((participant) => {
-      const exist = this.participants.some((user) => user.id === participant.id)
+      let exist = this.participants.some(
+        (user) => user.audioId === participant.id
+      )
 
       if (!exist) {
         this.participants.push(participant)
       } else {
         this.participants = this.participants.map<Participant>(
           (user: Participant) => {
-            if (user.id === participant.id) {
+            if (user.audioId === participant.id) {
               return Object.assign(user, participant)
             }
             return user
@@ -688,7 +1134,7 @@ class JanusClient {
     this.onParticipants.next(this.participants)
   }
 
-  private addPublishers(publishers: Publisher[]): void {
+  private addPublishers(roomId: number, publishers: Array<Publisher>): void {
     publishers.forEach((publisher) => {
       const exist = this.publishers.some((user) => user.id === publisher.id)
 
@@ -709,7 +1155,7 @@ class JanusClient {
 
   private removeParticipant(leavingId: number): void {
     this.participants = this.participants.filter(
-      (participant) => participant.id !== leavingId
+      (participant) => participant.audioId !== leavingId
     )
     this.onParticipants.next(this.participants)
   }

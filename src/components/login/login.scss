@@ -1,0 +1,45 @@
+@import '../../scss/colors.scss';
+@import '../../scss/typography.scss';
+
+.login-grid {
+  .grid {
+    box-sizing: border-box;
+    min-height: 100vh;
+    display: grid;
+    padding: 7vh 1vw 1vh 1vw;
+    grid-template-columns: [col-0] 35vw [col-1] 30vw;
+    grid-template-rows: [row-0] 10vh [row-1] 55vh;
+    gap: 10px 10px;
+
+    & > .item {
+      &__login {
+        grid-column: col-1;
+        grid-row: row-1 / row-1;
+
+        .item__login {
+          width: 100%;
+          margin: auto;
+          .login__form {
+            width:60%;
+            margin: auto;
+          }
+        }
+        .error-container {
+          width: 100%;
+          min-height: 1.2rem;
+          text-align: center;
+          display: inline-block;
+          .error-prompt {
+            display: inline-block;
+            width: 100%;
+            color: red;
+            transition: 0.3s;
+            &.hide {
+              display: none;
+            }
+          }
+        }
+      }
+    }
+  }
+}
