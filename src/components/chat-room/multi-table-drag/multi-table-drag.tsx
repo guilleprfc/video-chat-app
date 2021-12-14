@@ -7,8 +7,8 @@ import { mutliDragAwareReorder, multiSelectTo as multiSelect } from './utils'
 import {
   AiOutlineAudio,
   AiOutlineAudioMuted,
-  // AiTwotoneEye,
-  // AiOutlineEyeInvisible,
+  AiTwotoneEye,
+  AiOutlineEyeInvisible,
   AiFillWechat,
   AiFillDelete
 } from 'react-icons/ai'
@@ -51,14 +51,16 @@ interface MultiTableDragProps {
   unmute,
   switchRoom,
   isGuide,
+  selectVideo,
   user
 }
 
-const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute, unmute, switchRoom, isGuide }) => {
+const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute, unmute, switchRoom, isGuide, selectVideo, user }) => {
   // const [entities, setEntities] = useState<any>(data)
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
   const [draggingItemId, setDraggingItemId] = useState(null)
-
+  console.log('user',user)
+  
 
   const getTableColumns = () => {
     const columns: any[] = []
@@ -79,15 +81,53 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
             },
             key: 'id',
             render: (text, record) => (
-              isGuide ? ( record.muted ? (
-                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + data.rooms[i].id} />
+              isGuide ? ( record.muted ? ( record.selected ? ( record.id === user.id ? (
+                <>
+                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />
+                </>
               ) : (
-                <AiOutlineAudio className='mute-icon' id={'mute-' + data.rooms[i].id} onClick={mute} />
+                <>
+                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />
+                <AiOutlineEyeInvisible className='view-icon' id={'view-' + record.id} onClick={selectVideo} />
+                </>
               )
-              ) : ( record.muted ? (
-                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + data.rooms[i].id} />
+              ) : ( record.id === user.id ? (
+                <>
+                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />
+                </>
               ) : (
-                <AiOutlineAudio className='mute-icon' id={'mute-' + data.rooms[i].id} />
+                <>
+                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />
+                <AiTwotoneEye className='view-icon' id={'view-' + record.id} onClick={selectVideo} />
+                </>
+              )
+              )
+              ) : ( record.selected ? ( record.id === user.id ? (
+                <>
+                <AiOutlineAudio className='mute-icon' id={'mute-' + record.id} onClick={mute} />
+                </>
+              ) : (
+                <>
+                <AiOutlineAudio className='mute-icon' id={'mute-' + record.id} onClick={mute} />
+                <AiOutlineEyeInvisible className='view-icon' id={'view-' + record.id} onClick={selectVideo} />
+                </>
+              )
+              ) : ( record.id === user.id ? (
+                <>
+                <AiOutlineAudio className='mute-icon' id={'mute-' + record.id} onClick={mute} />
+                </>
+              ) : (
+                <>
+                <AiOutlineAudio className='mute-icon' id={'mute-' + record.id} onClick={mute} />
+                <AiTwotoneEye className='view-icon' id={'view-' + record.id} onClick={selectVideo} />
+                </>
+              )
+              )
+              )
+              ) : ( record.muted ? ( 
+                <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />
+              ) : ( 
+                <AiOutlineAudio className='mute-icon' id={'mute-' + record.id} />
               )
               )
             ),

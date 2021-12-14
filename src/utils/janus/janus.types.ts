@@ -75,6 +75,7 @@ export type Participant = {
   publisher?: boolean
   selected?: boolean
   ref?: any
+  room?: number
 }
 
 export type AudioParticipant = {

@@ -153,9 +153,14 @@ table {
     .room-name {
       font-size: 1.9vmin;
     }
+    svg.view-icon {
+      font-size: 2.5vmin;
+      margin-left: 1vmin;
+      cursor: pointer;
+      float: right;
+    }
     svg.mute-icon {
       font-size: 2vmin;
-      cursor: pointer;
     }
     svg.delete-icon {
       font-size: 2vmin;

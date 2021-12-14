@@ -218,7 +218,11 @@ class JanusClient {
    * Change to another audioBridge room
    * @param room (Optional) Number room to join. By default is 1234
    */
-   changeVideoRoom(sourceRoom: number, destinationRoom: number, display: string): Promise<boolean> {
+  changeVideoRoom(
+    sourceRoom: number,
+    destinationRoom: number,
+    display: string
+  ): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       try {
         const roomToJoin = destinationRoom || this.VIDEO_ROOM_DEFAULT
@@ -244,15 +248,13 @@ class JanusClient {
       } catch (error) {
         reject(false)
       }
-    }).then(
-      
-    )
+    }).then()
   }
 
   /**
    * Function that requests Janus to send or stop sending the video from videoRoom.
    */
-  subscribeToPublisher(relatedPublisher: Publisher): void {
+  subscribeToPublisher(relatedPublisher): void {
     if (!this.subscriberPluginattached) {
       this.attachVideoSubscriberPlugin().then(() => {
         if (this.videoRoomSubscriberPlugin) {
@@ -264,11 +266,12 @@ class JanusClient {
             'Error, the videoroom plugin for subscriptions could not be attached'
           )
         }
+        console.log('relatedPublisher', relatedPublisher)
         let message = {
           request: 'join',
           ptype: 'subscriber',
           room: this.VIDEO_ROOM_DEFAULT,
-          feed: relatedPublisher.id,
+          feed: relatedPublisher,
         }
         this.videoRoomSubscriberPlugin &&
           this.videoRoomSubscriberPlugin.send({ message })
@@ -276,7 +279,7 @@ class JanusClient {
     } else {
       let message = {
         request: 'switch',
-        feed: relatedPublisher.id,
+        feed: relatedPublisher,
       }
       this.videoRoomSubscriberPlugin &&
         this.videoRoomSubscriberPlugin.send({ message })
@@ -312,6 +315,25 @@ class JanusClient {
 
   setUserIsGuide(isGuide: boolean): void {
     this.userIsGuide = isGuide
+  }
+
+  loadUser(userName: string) {
+    let user: Participant = {}
+    if (this.rooms) {
+      for (let i = 0; i < this.rooms.length; i++) {
+        if (this.rooms[i].participants) {
+          for (let j = 0; j < this.rooms[i].participants!.length; j++) {
+            const participant = this.rooms[i].participants![j]
+            if (participant.display === userName) {
+              user = participant as Participant
+              user.room = this.rooms[i].roomId
+              this.user = user
+              break
+            }
+          }
+        }
+      }
+    }
   }
 
   async getChatInfo(): Promise<void> {
@@ -411,13 +433,23 @@ class JanusClient {
               }
             }
           }
-          rooms[i].participants = participants
+          rooms[i].participants = participants.sort(this.compare)
         }
         resolve()
       } catch (error) {
         reject('Could not get the chat status info: ' + error)
       }
     })
+  }
+
+  compare = (a, b) => {
+    if (a.display < b.display) {
+      return -1
+    }
+    if (a.display > b.display) {
+      return 1
+    }
+    return 0
   }
 
   async createRoom(description, roomId): Promise<any[]> {
@@ -869,9 +901,9 @@ class JanusClient {
   }
 
   private onLocalVideoStream(stream: MediaStream): void {
-    Janus.log('::: Got a local video stream :::')
-    Janus.log(stream)
     if (!this.userIsGuide) {
+      Janus.log('::: Got a local video stream :::')
+      Janus.log(stream)
       Janus.attachMediaStream(this.videoElement, stream)
     }
   }
@@ -883,9 +915,9 @@ class JanusClient {
   }
 
   private onRemoteVideoStream(stream: unknown): void {
-    Janus.log(' ::: Got a remote video stream :::')
-    Janus.log(stream)
     if (this.userIsGuide) {
+      Janus.log(' ::: Got a remote video stream :::')
+      Janus.log(stream)
       Janus.attachMediaStream(this.videoElement, stream)
     }
   }
@@ -1008,7 +1040,6 @@ class JanusClient {
             video +
             ')'
         )
-        // newRemoteFeed(id, display, audio, video);
       }
     }
 
@@ -1149,7 +1180,7 @@ class JanusClient {
         })
       }
     })
-
+    console.log('this.onPublishers.next', this.publishers)
     this.onPublishers.next(this.publishers)
   }
 

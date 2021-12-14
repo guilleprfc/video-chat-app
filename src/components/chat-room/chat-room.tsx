@@ -51,16 +51,22 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
   const queryParams = new URLSearchParams(window.location.search)
   const [name, setName] = useState<string>(queryParams.get('name') || 'GUEST')
   const [isMuted, setIsMuted] = useState<boolean>(true)
-  const [isGuide, setIsGuide] = useState<boolean>((): boolean => { return name.toLowerCase() === 'guide' ? true : false })
+  const [isGuide, setIsGuide] = useState<boolean>((): boolean => {
+    return name.toLowerCase() === 'guide' ? true : false
+  })
   const [isSelected, setIsSelected] = useState<boolean>(false)
   // Rooms, participants, publishers
   const [currentRoom, setCurrentRoom] = useState<number>()
   const [rooms, setRooms] = useState<Room[]>([])
-  
+
   const [participants, setParticipants] = useState<Participant[]>([])
   const [publishers, setPublishers] = useState<Participant[]>([])
-  const [roomData, setRoomData] = useState<MultiTableProps>({ items: [], roomIds: [], rooms: [] })
-  
+  const [roomData, setRoomData] = useState<MultiTableProps>({
+    items: [],
+    roomIds: [],
+    rooms: [],
+  })
+
   // Media locations
   const audioRef = useRef(null)
   const localVideoRef = useRef(null)
@@ -99,11 +105,11 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
 
     // Execute the Janus.init, connect the JanusClient to the Janus server
     try {
-      await janusClient.init(false) // Toogle Janus logs on/off
+      await janusClient.init(true) // Toogle Janus logs on/off
 
       janusClient.onTalking.subscribe(onTalkingEvent)
       janusClient.onStopTalking.subscribe(onStopTalkingEvent)
-      janusClient.onParticipants.subscribe((participants) => {
+      janusClient.onParticipants.subscribe( async (participants) => {
         const newParticipants = participants.map((user) => {
           return {
             ...user,
@@ -111,8 +117,9 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
           }
         })
         setParticipants(newParticipants)
+        await updateChatInfo(janusClient)
       })
-      janusClient.onPublishers.subscribe((publishers) => {
+      janusClient.onPublishers.subscribe( async (publishers) => {
         const newPublishers = publishers.map((user) => {
           return {
             ...user,
@@ -120,20 +127,22 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
           }
         })
         setPublishers(newPublishers)
+        await updateChatInfo(janusClient)
       })
+      janusClient.setUserIsGuide(isGuide)
 
       // Create a session and attach plugin handlers.
       await janusClient.connectToJanus()
 
       // Get rooms and participants from the Janus client and update them
       await updateChatInfo(janusClient)
-      
+
       // Check if the Hall room exists and if not, create and join it
       if (
         janusClient.rooms.length === 0 ||
         (janusClient.rooms.length > 0 &&
-          janusClient.rooms.filter((r) => r.description === 'Hall')
-            .length === 0)
+          janusClient.rooms.filter((r) => r.description === 'Hall').length ===
+            0)
       ) {
         // Create the default waiting room
         await createRoom('Hall', 1000000, janusClient)
@@ -144,12 +153,12 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
       if (!currentRoom) {
         await joinRoom(
           name,
-          janusClient.rooms.filter(
-            (r) => r.description === 'Hall'
-          )![0].roomId!,
+          janusClient.rooms.filter((r) => r.description === 'Hall')![0].roomId!,
           janusClient
         )
-        setCurrentRoom(janusClient.rooms.filter((r) => r.description === 'Hall')[0].roomId)
+        setCurrentRoom(
+          janusClient.rooms.filter((r) => r.description === 'Hall')[0].roomId
+        )
         // Refresh the state of the chat from Janus
         await updateChatInfo(janusClient)
       }
@@ -177,9 +186,8 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
    */
   //  useEffect(() => {
   //   console.log('rooms before setting child component props',rooms)
-    
-  // }, [rooms])
 
+  // }, [rooms])
 
   const buildMultiTableProps = (rooms: Array<Room>) => {
     const props: MultiTableProps = { items: [], roomIds: [], rooms: [] }
@@ -189,10 +197,14 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
     for (let i = 0; i < rooms.length; i++) {
       allParticipants = allParticipants.concat(rooms[i].participants)
     }
+    // console.log('rooms', rooms[0].participants!.length)
+    console.log('allParticipants', allParticipants)
     for (let i = 0; i < allParticipants.length; i++) {
-      allParticipants[i].id = allParticipants[i].audioId.toString()
-      allParticipants[i].audioId = allParticipants[i].audioId.toString()
-      allParticipants[i].videoId = allParticipants[i].videoId.toString()
+      if(allParticipants[i]) {
+        allParticipants[i].id = allParticipants[i].audioId.toString()
+        allParticipants[i].audioId = allParticipants[i].audioId.toString()
+        allParticipants[i].videoId = allParticipants[i].videoId.toString()
+      }
     }
     // Add all participants to the props
     props.items = allParticipants
@@ -200,8 +212,10 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
     for (let i = 0; i < rooms.length; i++) {
       props.roomIds[i] = rooms[i].roomId!.toString()
       // Retrieve the list of participants that are in the room
-      for (let j = 0; j < rooms[i].participants!.length; j++) {
-        roomParticipants[j] = rooms[i].participants![j].audioId!.toString()
+      if (rooms[i].participants) {
+        for (let j = 0; j < rooms[i].participants!.length; j++) {
+          roomParticipants[j] = rooms[i].participants![j].audioId!.toString()
+        }
       }
       props.rooms[i] = {
         id: rooms[i].roomId!.toString(),
@@ -281,15 +295,23 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
     console.log('switchRoom', [pUser, source, destination])
 
     // Videoroom will require to make a leave-joinandconfigure-publish round to change rooms
-    await changeVideoRoom(state?.janusClient, source.droppableId, destination.droppableId)
+    await changeVideoRoom(
+      state?.janusClient,
+      source.droppableId,
+      destination.droppableId
+    )
 
     // Audiobridge has the changeroom request to easily change rooms
     await changeAudioRoom(state?.janusClient, destination.droppableId)
 
     if (pUser.Id === user?.audioId || pUser.Id === user?.audioId) {
-      setCurrentRoom(state?.janusClient.rooms.filter((r) => r.roomId === destination.droppableId)[0].roomId)
+      setCurrentRoom(
+        state?.janusClient.rooms.filter(
+          (r) => r.roomId === destination.droppableId
+        )[0].roomId
+      )
     }
-    
+
     // Refresh the state of the chat from Janus
     await updateChatInfo(state?.janusClient)
   }
@@ -314,21 +336,37 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
     }
   }
 
-  const onClickSelectVideo = (
-    event: React.MouseEvent<SVGElement>,
-    participant: Participant
-  ) => {
-    event.preventDefault()
-    setIsSelected(!isSelected)
-    const relatedPublisher = publishers.find(
-      (publisher) => participant.display === publisher.display
-    )
-    if (relatedPublisher) {
+  const selectVideo = (event) => {
+    // get the user from the chat info
+    const userId = event.target.id.split('-')[1]
+    const selectedParticipant = getUserByAudioId(userId)
+    
+    // check if the user is publishing
+    const isPublisher = selectedParticipant.publisher
+    if (isPublisher) {
+      // call to subscribeToPublisher
       if (state && state.janusClient)
-        state.janusClient.subscribeToPublisher(relatedPublisher)
+        state.janusClient.subscribeToPublisher(Number(selectedParticipant.videoId))
     } else {
       console.log('Error: Participant is not a publisher.')
     }
+  }
+
+  const getUserByAudioId = (audioId: number): Participant => {
+    let u: Participant = {}
+    if (state?.janusClient.rooms) {
+      for (let i = 0; i < state?.janusClient.rooms.length; i++) {
+        for (let j = 0; j < state?.janusClient.rooms[i].participants!.length; j++) {
+          const participant = state?.janusClient.rooms[i].participants![j]
+          if (participant.audioId === audioId) {
+            u = participant as Participant
+            u.room = state?.janusClient.rooms[i].roomId
+            break
+          }
+        }
+      }
+    }
+    return u
   }
 
   const onClickCreateRoom = async () => {
@@ -337,7 +375,7 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
       'Please enter the name of the room you want to create',
       ''
     )
-    if(state?.janusClient) {
+    if (state?.janusClient) {
       // Call the room creation method in Janus
       await createRoom(roomName, getNextRoomId(), state?.janusClient)
       await updateChatInfo(state?.janusClient)
@@ -370,6 +408,8 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
     await janusClient.getChatInfo()
     setRooms(janusClient.rooms)
     setRoomData(buildMultiTableProps(janusClient.rooms))
+    janusClient.loadUser(name)
+    setUser(janusClient.user)
     console.log('Chat info refreshed', janusClient.rooms)
   }
 
@@ -390,10 +430,12 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
 
   const onClickDestroyRoom = async (event) => {
     const roomId = event.target.id.split('-')[1]
-    var result = window.confirm('You are about to delete this room, are you sure?')
+    var result = window.confirm(
+      'You are about to delete this room, are you sure?'
+    )
     if (result) {
       console.log('room deletion confirmed')
-      if(state?.janusClient) {
+      if (state?.janusClient) {
         // Call the room deletion method in Janus
         await destroyRoom(roomId, state?.janusClient)
         updateChatInfo(state?.janusClient)
@@ -419,7 +461,7 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
           </div>
         </>
       </GridItem>
-      <GridItem classItem="Chat" title="Tour room">
+      <GridItem classItem="Chat" title="Tour rooms">
         <div className="chat">
           {!isJanusEnabled && (
             <>
@@ -430,13 +472,24 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
           )}
           {isJanusEnabled && (
             <>
-              <button
-                className="btn button-primary"
-                onClick={onClickCreateRoom}
-              >
-                Create Room
-              </button>
-              <MultiTableDrag data={roomData} destroyRoom={onClickDestroyRoom} mute={mute} unmute={unmute} switchRoom={switchRoom} isGuide={isGuide} user={user}/>
+              {isGuide && (
+                <button
+                  className="btn button-primary"
+                  onClick={onClickCreateRoom}
+                >
+                  Create Room
+                </button>
+              )}
+              <MultiTableDrag
+                data={roomData}
+                destroyRoom={onClickDestroyRoom}
+                mute={mute}
+                unmute={unmute}
+                switchRoom={switchRoom}
+                isGuide={isGuide}
+                selectVideo={selectVideo}
+                user={user}
+              />
             </>
           )}
         </div>
