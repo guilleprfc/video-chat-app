@@ -2,6 +2,7 @@ import { BehaviorSubject } from 'rxjs'
 import {
   JoinAudioOptions,
   JoinVideoOptions,
+  JoinTextOptions,
   MessageAudioJoin,
   MessageAudioSuccess,
   MessageAudioParticipants,
@@ -19,6 +20,7 @@ import {
   VideoRoom,
   AudioRoom,
   Room,
+  SwitchRequest,
 } from './janus.types'
 
 import Janus from '../../janus/janus' // new import
@@ -27,26 +29,34 @@ import Janus from '../../janus/janus' // new import
 
 const AUDOBRIDGE_PLUGIN_NAME = 'janus.plugin.audiobridge'
 const VIDEOROOM_PLUGIN_NAME = 'janus.plugin.videoroom'
-const opaqueId = 'audiobridgetest-' + Janus.randomString(12)
+const TEXTROOM_PLUGIN_NAME = 'janus.plugin.textroom'
+const opaqueId = Janus.randomString(12)
 class JanusClient {
   url: string // Janus URL
   audioOptions: JoinAudioOptions = {} // Audio options
   videoOptions: JoinVideoOptions = {} // Video options
+  textOptions: JoinTextOptions = {} // Text options
   initJanus = false // Specify if the Janus library was initialized or not
   webrtcUp = false // Specify if the audio stream was sent to Janus or not
   client: JanusClass | undefined // Instance of Janus
   audioBridgePlugin: PluginHandle | undefined // Audio Bridge plugin instance
   videoRoomPlugin: PluginHandle | undefined // Video Room plugin instance
   videoRoomSubscriberPlugin: PluginHandle | undefined // Video Room plugin instance for subscribing to publishers (Guides)
+  textRoomPlugin: PluginHandle | undefined // Text Room plugin instance
 
   AUDIO_ROOM_DEFAULT = 1000000 // Default audio room
   VIDEO_ROOM_DEFAULT = 1000000 // Default video room
+  TEXT_ROOM_DEFAULT = 1234 // Default text room
 
-  id = 0 // Id that identifies the user in Janus
+  id: number | undefined // Id that identifies the user in Janus
 
   rooms: Room[] = [] // Existing rooms
   participants: Participant[] = [] // Users connected in the audio chat
   publishers: Publisher[] = [] // Users publishing media via videoRoom
+  textRoom: Room | undefined
+
+  // Flag used to switch video rooms when needed
+  pendingToSwitch: SwitchRequest | undefined
 
   userIsGuide: boolean = false
   subscriberPluginattached: boolean = false
@@ -107,7 +117,7 @@ class JanusClient {
    * AUDIOBRIDGE plugin
    * Join a user in a room to allow audio chat
    * @param options User audio options
-   * @param room (Optional) Number room to join. By default is 1234
+   * @param room (Optional) Number room to join.
    */
   joinAudioRoom(options: JoinAudioOptions, room?: number): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
@@ -116,10 +126,7 @@ class JanusClient {
         const roomToJoin = room || this.AUDIO_ROOM_DEFAULT
         const { display, muted } = options
         this.user = {
-          audioId: 0,
           display,
-          muted,
-          setup: true,
         }
         const message = {
           request: 'join',
@@ -131,7 +138,6 @@ class JanusClient {
           this.audioBridgePlugin.send({
             message,
             success: () => {
-              console.log('Joined audiobridge room', roomToJoin)
               resolve(true)
             },
           })
@@ -144,8 +150,8 @@ class JanusClient {
   /**
    * VIDEOROOM plugin
    * Join a user in a video room
-   * @param options User audio options
-   * @param room (Optional) Number room to join. By default is 1234
+   * @param options User video options
+   * @param room (Optional) Number room to join.
    */
   joinVideoRoom(options: JoinVideoOptions, room?: number): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
@@ -154,9 +160,7 @@ class JanusClient {
         const roomToJoin = room || this.VIDEO_ROOM_DEFAULT
         const { display, ptype } = options
         this.user = {
-          videoId: 0,
           display,
-          setup: true,
         }
         const message = {
           request: 'join',
@@ -168,8 +172,14 @@ class JanusClient {
           this.videoRoomPlugin.send({
             message,
             success: () => {
-              console.log('Joined videoroom room', roomToJoin)
+              console.log('Joining room ' + message.room)
+              console.log('message', message)
+              console.log('videoRoomPlugin', this.videoRoomPlugin)
               resolve(true)
+            },
+            error: (error) => {
+              console.log('error', error)
+              resolve(false)
             },
           })
       } catch (error) {
@@ -179,31 +189,73 @@ class JanusClient {
   }
 
   /**
+   * TEXTROOM plugin
+   * Join a user in a text room
+   * @param room (Optional) Number room to join. By default is 1234.
+   */
+  joinTextRoom(options: JoinTextOptions, room?: number): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      try {
+        this.textOptions = options
+        const roomToJoin = room || this.TEXT_ROOM_DEFAULT
+        const { display, username } = options
+        const message = {
+          textroom: 'join',
+          transaction: this.randomString(12),
+          room: roomToJoin,
+          username,
+          display,
+        }
+        this.textRoomPlugin &&
+          this.textRoomPlugin.data({
+            text: JSON.stringify(message),
+            success: () => {
+              resolve(true)
+            },
+            error: (error) => {
+              console.log('error', error)
+              reject(false)
+            },
+          })
+      } catch (error) {
+        reject(false)
+      }
+    })
+  }
+
+  private async switchRoom(user, source, destination) {
+    console.log('switchRoom', [user, source, destination])
+
+    // Audiobridge has the changeroom request to easily change rooms
+    await this.switchAudioRoom(user, destination)
+
+    // Videoroom will require to make a leave-joinandconfigure-publish round to change rooms
+    await this.switchVideoRoom(user, source, destination)
+
+    // Trigger a reload of the chat info
+    // await this.getChatInfo()
+  }
+
+  /**
    * AUDIOBRIDGE plugin
    * Change to another audioBridge room
    * @param room (Optional) Number room to join. By default is 1234
    */
-  changeAudioRoom(room: number, display: string): Promise<boolean> {
+  private switchAudioRoom(user: any, room: number): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       try {
         const roomToJoin = room || this.AUDIO_ROOM_DEFAULT
-        this.user = {
-          audioId: 0,
-          display,
-          muted: true,
-          setup: true,
-        }
         const message = {
           request: 'changeroom',
-          room: roomToJoin,
-          display,
+          room: Number(roomToJoin),
+          display: user.display,
           muted: true,
         }
         this.audioBridgePlugin &&
           this.audioBridgePlugin.send({
             message,
             success: () => {
-              console.log('Changed audiobridge room', roomToJoin)
+              console.log('Changing to audio room ' + roomToJoin.toString())
               resolve(true)
             },
           })
@@ -218,37 +270,48 @@ class JanusClient {
    * Change to another audioBridge room
    * @param room (Optional) Number room to join. By default is 1234
    */
-  changeVideoRoom(
+  private switchVideoRoom(
+    user: any,
     sourceRoom: number,
-    destinationRoom: number,
-    display: string
+    destinationRoom: number
   ): Promise<boolean> {
-    return new Promise<boolean>((resolve, reject) => {
+    return new Promise<boolean>(async (resolve, reject) => {
       try {
-        const roomToJoin = destinationRoom || this.VIDEO_ROOM_DEFAULT
-        this.user = {
-          videoId: 0,
-          display,
-          setup: true,
-        }
+        // When the event from Janus is received, join the new room, for that,
+        // store the destination room in the 'pendingToSwitch' variable.
+        this.pendingToSwitch = {
+          destinationId: destinationRoom,
+          display: user.display,
+        } as SwitchRequest
+        // Leave the current video room
+        this.leaveVideoRoom(sourceRoom)
+        resolve(true)
+      } catch (error) {
+        reject(false)
+      }
+    })
+  }
+
+  private leaveVideoRoom(room: number): Promise<boolean> {
+    return new Promise<boolean>(async (resolve, reject) => {
+      try {
         const message = {
-          request: 'join',
-          display,
-          ptype: 'publisher',
-          room: roomToJoin,
+          request: 'leave',
+          room,
         }
         this.videoRoomPlugin &&
           this.videoRoomPlugin.send({
             message,
             success: () => {
-              console.log('Joined videoroom room', roomToJoin)
+              console.log('Leaving videoroom', room)
               resolve(true)
             },
           })
+        resolve(true)
       } catch (error) {
         reject(false)
       }
-    }).then()
+    })
   }
 
   /**
@@ -300,6 +363,28 @@ class JanusClient {
           message,
           success: (result) => {
             console.log('user muted', muted)
+          },
+        })
+    }
+  }
+
+  sendWhisper(to: string, text): void {
+    if (to) {
+      const message = {
+        textroom: 'message',
+        transaction: this.randomString(12),
+        room: this.TEXT_ROOM_DEFAULT,
+        to,
+        text,
+      }
+      this.textRoomPlugin &&
+        this.textRoomPlugin.data({
+          text: JSON.stringify(message),
+          success: (result) => {
+            console.log('text message sent to ' + to + ':', text)
+          },
+          error: (result) => {
+            console.error(result)
           },
         })
     }
@@ -435,21 +520,12 @@ class JanusClient {
           }
           rooms[i].participants = participants.sort(this.compare)
         }
+        this.loadUser(this.user?.display!)
         resolve()
       } catch (error) {
         reject('Could not get the chat status info: ' + error)
       }
     })
-  }
-
-  compare = (a, b) => {
-    if (a.display < b.display) {
-      return -1
-    }
-    if (a.display > b.display) {
-      return 1
-    }
-    return 0
   }
 
   async createRoom(description, roomId): Promise<any[]> {
@@ -491,7 +567,7 @@ class JanusClient {
         // Send the request to Janus
         if (this.videoRoomPlugin) {
           this.videoRoomPlugin.send({
-            message: { request: 'create', room: roomId, description },
+            message: { request: 'create', room: roomId, description, publishers: 10 },
             success: (result) => {
               // console.log('video room ' + roomId + ' created', result)
               resolve()
@@ -678,6 +754,7 @@ class JanusClient {
     return Promise.all([
       this.attachAudioBridgePlugin(),
       this.attachVideoRoomPlugin(),
+      this.attachTextRoomPlugin(),
     ])
   }
 
@@ -703,6 +780,21 @@ class JanusClient {
         resolve()
       } catch (error) {
         reject('Could not attach videoRoom plugin: ' + error)
+      }
+    })
+  }
+
+  private attachTextRoomPlugin(): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        this.textRoomPlugin = await this.attachToTextRoom()
+        Janus.log(`Plugin attached! (
+          ${this.textRoomPlugin.getPlugin()}, id=${this.textRoomPlugin.getId()})`)
+        // Setup the DataChannel
+        this.textRoomPlugin.send({ message: { request: 'setup' } })
+        resolve()
+      } catch (error) {
+        reject('Could not attach textRoom plugin: ' + error)
       }
     })
   }
@@ -772,6 +864,25 @@ class JanusClient {
     })
   }
 
+  private attachToTextRoom(): Promise<PluginHandle> {
+    return new Promise<PluginHandle>((resolve, reject) => {
+      this.client &&
+        this.client.attach({
+          plugin: TEXTROOM_PLUGIN_NAME,
+          opaqueId,
+          success: resolve,
+          error: reject,
+          iceState: this.onIceState.bind(this),
+          mediaState: this.onMediaState.bind(this),
+          webrtcState: this.onWebrtcState.bind(this),
+          onmessage: this.onMessageText.bind(this),
+          ondataopen: this.onDataOpen.bind(this),
+          ondata: this.onData.bind(this),
+          oncleanup: this.onCleanUp.bind(this),
+        })
+    })
+  }
+
   private onIceState(state: unknown): void {
     Janus.log(`ICE state changed to ${state}`)
   }
@@ -807,6 +918,10 @@ class JanusClient {
           this.onAudioEvent(message)
           break
         }
+        case MessagesType.MESSAGE_CHANGEROOM: {
+          this.onAudioChangeRoom(message)
+          break
+        }
         case MessagesType.MESSAGE_STOP_TALKING:
         case MessagesType.MESSAGE_TALKING: {
           this.onTalkingEvent(message as MessageTalkEvent)
@@ -823,6 +938,7 @@ class JanusClient {
 
   private onMessageVideo(message, jsep): void {
     const { videoroom: msgType } = message
+    console.log('New video message', message)
 
     if (msgType) {
       switch (msgType) {
@@ -922,6 +1038,93 @@ class JanusClient {
     }
   }
 
+  private onMessageText(message, jsep) {
+    Janus.log(' ::: Got a message :::', message)
+    console.log(' ::: Got a message :::', message)
+    if (message['error']) {
+      console.log('error', message['error'])
+    }
+    if (jsep) {
+      // Answer
+      this.textRoomPlugin!.createAnswer({
+        jsep: jsep,
+        media: { audio: false, video: false, data: true }, // We only use datachannels
+        success: (jsep) => {
+          Janus.log('Got SDP!', jsep)
+          var body = { request: 'ack' }
+          this.textRoomPlugin!.send({ message: body, jsep: jsep })
+        },
+        error: (error) => {
+          Janus.error('WebRTC error:', error)
+        },
+      })
+    }
+  }
+
+  private async onDataOpen(data) {
+    console.log('::: The DataChannel is available! :::')
+    console.log('user', this.user)
+    await this.joinTextRoom(
+      { display: this.user?.display, username: this.user?.display },
+      this.TEXT_ROOM_DEFAULT
+    )
+  }
+
+  private onData(data) {
+    console.debug('We got data from the DataChannel!', data)
+    var json = JSON.parse(data)
+    // var transaction = json['transaction']
+    // if (transactions[transaction]) {
+    //   // Someone was waiting for this
+    //   transactions[transaction](json)
+    //   delete transactions[transaction]
+    //   return
+    // }
+    var what = json['textroom']
+    var msg = this.escapeXmlTags(json['text'])
+    var whisper = json['whisper']
+    // var from = json['from']
+    // var dateString = this.getDateString(json['date'])
+    // var sender = this.escapeXmlTags(json['display'])
+    // var display = json['display']
+    var username = json['username']
+
+    if (what === 'message') {
+      // Incoming message: public or private?
+      if (whisper === true) {
+        // Private message
+        console.log('::: A private message arrived :::', msg)
+        var orderParams = msg.split('|')
+        if (orderParams.length > 0) {
+          var orderWhat = orderParams[0]
+          if (orderWhat === 'switchRooms') {
+            var originId = orderParams[1]
+            var destinationId = orderParams[2]
+            // trigger the room switch here
+            this.switchRoom(this.user, originId, destinationId)
+          }
+        }
+      } else {
+        // Public message
+        console.log('::: A public message arrived :::', msg)
+      }
+    } else if (what === 'announcement') {
+      console.log('::: An announcement message arrived :::', msg)
+    } else if (what === 'join') {
+      // Somebody joined
+      console.log('::: Somebody joined the text room :::', username)
+    } else if (what === 'leave') {
+      // Somebody left
+      console.log('::: Somebody left the text room :::', msg)
+    } else if (what === 'kicked') {
+      // Somebody was kicked
+      console.log('::: Somebody was kicked from the text room :::', username)
+    } else if (what === 'destroyed') {
+      // Room was destroyed, goodbye!
+      Janus.warn('The room has been destroyed!')
+    }
+  }
+
   private onCleanUp(): void {
     Janus.log('Cleanup notification')
     this.webrtcUp = false
@@ -935,15 +1138,15 @@ class JanusClient {
    */
   private onJoinAudio(message: MessageAudioJoin): void {
     const { id, participants, room } = message
-    Janus.log(`Successfully joined audio room ${room} with ID ${this.id}`)
+    Janus.log(`Successfully joined audio room ${room} with ID ${id}`)
     console.log(
-      `User with ID ${this.id} successfully joined audio room ${room}`
+      `User with ID ${id} successfully joined audio room ${room}`
     )
     if (!this.webrtcUp) {
-      if (this.user) {
-        this.user.audioId = id
-        this.onUser.next(this.user)
-      }
+      // if (this.user) {
+      //   this.user.audioId = id
+      //   this.onUser.next(this.user)
+      // }
       this.webrtcUp = true
       this.createOfferAudioBridge()
     }
@@ -961,15 +1164,15 @@ class JanusClient {
    */
   private onJoinVideo(message: MessageVideoJoin): void {
     const { id, publishers, room } = message
-    Janus.log(`Successfully joined video room ${room} with ID ${this.id}`)
+    Janus.log(`Successfully joined video room ${room} with ID ${id}`)
     console.log(
-      `User with ID ${this.id} successfully joined video room ${room}`
+      `User with ID ${id} successfully joined video room ${room}`
     )
     if (!this.webrtcUp) {
-      if (this.user) {
-        this.user.audioId = id
-        this.onUser.next(this.user)
-      }
+      // if (this.user) {
+      //   this.user.audioId = id
+      //   this.onUser.next(this.user)
+      // }
       this.webrtcUp = true
     }
     // After joining the room, we publish our own feed
@@ -998,6 +1201,7 @@ class JanusClient {
   private onAudioEvent(message): void {
     const { participants, error, leaving, room } = message
     Janus.log(`Received an audio event ${message}`)
+    console.log('Received an audio event', message)
 
     if (participants && participants.length > 0) {
       this.addParticipants(room, participants as Array<AudioParticipant>)
@@ -1013,6 +1217,19 @@ class JanusClient {
   }
 
   /**
+   * AUDIOBRIDGE plugin
+   * When it receives a message from Janus with an changeroom message from audioBridge
+   * @param message // Message received
+   */
+  private onAudioChangeRoom(message): void {
+    const { participants, error, display, room } = message
+    Janus.log(`Received an audio changeroom message ${message}`)
+    console.log('Received an audio changeroom message', message)
+    // Refresh the info from the server
+    this.getChatInfo()
+  }
+
+  /**
    * VIDEOROOM plugin
    * When it receives a message from Janus with an event from videoRoom
    * @param message // Message received
@@ -1020,27 +1237,10 @@ class JanusClient {
   private onVideoEvent(message): void {
     const { publishers, error, leaving, room } = message
     Janus.log(`Received a video event ${message}`)
+    console.log('Received a video event', message)
 
     if (message['publishers'] !== undefined && message['publishers'] !== null) {
       Janus.log('new publishers!')
-      let list = message['publishers']
-      for (let f in list) {
-        let id = list[f]['id']
-        let display = list[f]['display']
-        let audio = list[f]['audio_codec']
-        let video = list[f]['video_codec']
-        Janus.log(
-          '  >> [' +
-            id +
-            '] ' +
-            display +
-            ' (audio: ' +
-            audio +
-            ', video: ' +
-            video +
-            ')'
-        )
-      }
     }
 
     if (publishers && publishers.length > 0) {
@@ -1052,7 +1252,8 @@ class JanusClient {
     }
 
     if (leaving) {
-      this.removePublisher(leaving)
+      // Remove the user from the "rooms" object
+      this.removePublisher(room, leaving)
     }
   }
 
@@ -1180,7 +1381,6 @@ class JanusClient {
         })
       }
     })
-    console.log('this.onPublishers.next', this.publishers)
     this.onPublishers.next(this.publishers)
   }
 
@@ -1191,11 +1391,153 @@ class JanusClient {
     this.onParticipants.next(this.participants)
   }
 
-  private removePublisher(leavingId: number): void {
-    this.publishers = this.publishers.filter(
-      (publisher) => publisher.id !== leavingId
+  private removePublisher(roomId: number, leavingId: number): Promise<boolean> {
+    return new Promise<boolean>( async (resolve, reject) => {
+      try {
+        var userId = leavingId
+        // The leaving user is him/herself
+        if (leavingId.toString() === 'ok') {
+          userId = this.user?.videoId!
+        }
+        console.log('this.rooms', this.rooms)
+        console.log(
+          'participants in room before',
+          this.rooms[0].participants!.length
+        )
+        let index = this.rooms
+          .map((r) => {
+            return r.roomId
+          })
+          .indexOf(roomId)
+        console.log('index of room ' + roomId + ' is ' + index)
+        console.log('leavingId', leavingId)
+        console.log('userId', userId)
+        console.log('this.user', this.user)
+        this.rooms[index].participants = this.rooms[index].participants!.filter(
+          (participant) => {
+            return participant.videoId !== userId
+          }
+        )
+        this.rooms[index].videoRoom!.participants = this.rooms[
+          index
+        ].videoRoom!.participants!.filter((participant) => {
+          return participant.id !== userId
+        })
+
+        console.log(
+          'participants in room after',
+          this.rooms[0].participants!.length
+        )
+        // If the user leaving was caused by a room change, a switchRequest should exist
+        if (leavingId.toString() === 'ok' && this.pendingToSwitch) {
+          // To join a room after leaving, a detech/attach round is required for the PluginHandle
+          await this.videoRoomPlugin?.detach({})
+          await this.attachVideoRoomPlugin()
+          this.joinVideoRoom({ display: this.pendingToSwitch.display, ptype: 'publisher' }, Number(this.pendingToSwitch.destinationId))
+          this.pendingToSwitch = undefined
+        }
+        this.onPublishers.next(this.publishers)
+        resolve(true)
+      } catch (error) {
+        reject(false)
+      }
+    })
+  }
+
+  private removePublisher2(roomId: number, leavingId: number): void {
+    // this.publishers = this.publishers.filter(
+    //   (publisher) => publisher.id !== leavingId
+    // )
+    var userId = leavingId
+    // The leaving user is him/herself
+    if (leavingId.toString() === 'ok') {
+      userId = this.user?.videoId!
+    }
+    console.log('this.rooms', this.rooms)
+    console.log(
+      'participants in room before',
+      this.rooms[0].participants!.length
     )
-    this.onPublishers.next(this.publishers)
+    let index = this.rooms
+      .map((r) => {
+        return r.roomId
+      })
+      .indexOf(roomId)
+    console.log('index of room ' + roomId + ' is ' + index)
+    console.log('leavingId', leavingId)
+    console.log('userId', userId)
+    console.log('this.user', this.user)
+    this.rooms[index].participants = this.rooms[index].participants!.filter(
+      (participant) => {
+        return participant.videoId !== userId
+      }
+    )
+    this.rooms[index].videoRoom!.participants = this.rooms[
+      index
+    ].videoRoom!.participants!.filter((participant) => {
+      return participant.id !== userId
+    })
+
+    console.log(
+      'participants in room after',
+      this.rooms[0].participants!.length
+    )
+    // If the user leaving was caused by a room change, a switchRequest should exist
+    if (leavingId.toString() === 'ok' && this.pendingToSwitch) {
+      console.log('this.pendingToSwitch',this.pendingToSwitch)
+      this.joinVideoRoom({ display: this.pendingToSwitch.display, ptype: 'publisher' }, Number(this.pendingToSwitch.destinationId))
+      // this.joinVideoRoom(
+      //   { display: this.pendingToSwitch.display, ptype: 'publisher' },
+      //   1000000
+      // )
+      this.pendingToSwitch = undefined
+    }
+    // this.onPublishers.next(this.publishers)
+  }
+
+  private escapeXmlTags(value) {
+    if (value) {
+      var escapedValue = value.replace(new RegExp('<', 'g'), '&lt')
+      escapedValue = escapedValue.replace(new RegExp('>', 'g'), '&gt')
+      return escapedValue
+    }
+  }
+
+  // Helper to format times
+  // private getDateString(jsonDate) {
+  //   var when = new Date()
+  //   if (jsonDate) {
+  //     when = new Date(Date.parse(jsonDate))
+  //   }
+  //   var dateString =
+  //     ('0' + when.getUTCHours()).slice(-2) +
+  //     ':' +
+  //     ('0' + when.getUTCMinutes()).slice(-2) +
+  //     ':' +
+  //     ('0' + when.getUTCSeconds()).slice(-2)
+  //   return dateString
+  // }
+
+  // Helper method to create random identifiers (e.g., transaction)
+  private randomString(len) {
+    const charSet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    var randomString = ''
+    for (var i = 0; i < len; i++) {
+      var randomPoz = Math.floor(Math.random() * charSet.length)
+      randomString += charSet.substring(randomPoz, randomPoz + 1)
+    }
+    return randomString
+  }
+
+  private compare = (a, b) => {
+    if (a.display < b.display) {
+      return -1
+    }
+    if (a.display > b.display) {
+      return 1
+    }
+    return 0
   }
 }
 

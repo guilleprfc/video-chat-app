@@ -47,7 +47,12 @@
       }
     }
   }
-
+  .create-room {
+    width: 60%;
+    max-width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+  }
   .loader-container {
     margin: auto;
     text-align: center;
@@ -152,6 +157,7 @@ table {
   .ant-table-cell {
     .room-name {
       font-size: 1.9vmin;
+      cursor: pointer;
     }
     svg.view-icon {
       font-size: 2.5vmin;

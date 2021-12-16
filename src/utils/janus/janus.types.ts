@@ -15,6 +15,13 @@ export type JoinVideoOptions = {
   feed?: string // Id of the participant a subscriber is suscribed to, mandatory when ptype is 'subscriber'
 }
 
+export type JoinTextOptions = {
+  pin?: string // "<pin to join the room; mandatory if configured>",
+  username?: string // "<unique username to have in the room; mandatory>",
+  display?: string // "<display name to use in the room; optional>",
+  token?: string // "<invitation token, in case the room has an ACL; optional>",
+}
+
 export type Room = {
   roomId?: number
   description?: string
@@ -168,7 +175,7 @@ interface JSEP {}
 
 interface PluginMessage {
   message: {
-    request: string
+    request?: string
     [otherProps: string]: any
   }
   jsep?: JSEP
@@ -336,5 +343,11 @@ export enum MessagesType {
   MESSAGE_STOP_TALKING = 'stopped-talking',
   MESSAGE_UPDATE = 'updated',
   MESSAGE_ATTACHED = 'attached',
-  MESSAGE_PARTICIPANTS = 'participants'
+  MESSAGE_PARTICIPANTS = 'participants',
+  MESSAGE_CHANGEROOM = 'roomchanged'
+}
+
+export interface SwitchRequest {
+  destinationId?: number
+  display?: string
 }

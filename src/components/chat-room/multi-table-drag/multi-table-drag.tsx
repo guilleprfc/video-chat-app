@@ -49,18 +49,17 @@ interface MultiTableDragProps {
   destroyRoom,
   mute,
   unmute,
-  switchRoom,
+  onClickSwitchRoom,
+  orderSwitchRoom,
   isGuide,
   selectVideo,
   user
 }
 
-const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute, unmute, switchRoom, isGuide, selectVideo, user }) => {
+const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute, unmute, onClickSwitchRoom, orderSwitchRoom, isGuide, selectVideo, user }) => {
   // const [entities, setEntities] = useState<any>(data)
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
   const [draggingItemId, setDraggingItemId] = useState(null)
-  console.log('user',user)
-  
 
   const getTableColumns = () => {
     const columns: any[] = []
@@ -70,7 +69,7 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
           {
             title: <>
             <span><AiFillWechat className='room-icon'/></span>
-            <span className='room-name'>{data.rooms[i].title}</span>
+            <span className='room-name' onClick={onClickSwitchRoom}>{data.rooms[i].title}</span>
             </>,
             dataIndex: 'display',
             key: 'id'
@@ -137,7 +136,6 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
     }
     return columns
   }
-  // const [tableColumns, setTableColumns] = useState<any[]>(getTableColumns)
 
   /**
    * On window click
@@ -311,7 +309,6 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
    * On drag end
    */
   const onDragEnd = (result) => {
-    console.log('onDragEnd result', result)
     const destination = result.destination
     const source = result.source
 
@@ -320,7 +317,6 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
       setDraggingItemId(null)
       return
     }
-    console.log('selectedItemIds', selectedItemIds)
     
     const processed = mutliDragAwareReorder({
       data,
@@ -330,9 +326,7 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
     })
 
     console.log('onDragEnd', processed)
-
-    switchRoom(selectedItemIds, source, destination)
-    // setEntities(processed.data)
+    orderSwitchRoom(draggingItemId, source, destination)
     setDraggingItemId(null)
   }
 
