@@ -155,6 +155,9 @@ table {
     display: none;
   }
   .ant-table-cell {
+    .bold-text {
+      font-weight: bold;
+    }
     .room-name {
       font-size: 1.9vmin;
       cursor: pointer;

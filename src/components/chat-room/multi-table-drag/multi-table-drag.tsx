@@ -67,19 +67,24 @@ const MultiTableDrag: React.FC<MultiTableDragProps> = ({ data, destroyRoom, mute
       for (let i = 0; i < data.roomIds.length; i++) {
         columns[i] = [
           {
-            title: <>
-            <span><AiFillWechat className='room-icon'/></span>
-            <span className='room-name' onClick={onClickSwitchRoom}>{data.rooms[i].title}</span>
+            title:
+            <>
+              <span><AiFillWechat className='room-icon'/></span>
+              <span className='room-name' onClick={onClickSwitchRoom}>{data.rooms[i].title}</span>
             </>,
-            dataIndex: 'display',
-            key: 'id'
+            key: 'id',
+            render: (record) => (
+              <>
+                <span className={record.id === user.id ? 'bold-text' : ''}>{record.display}</span>
+              </>
+            ) 
           },
           {
             title: () => {
               return (isGuide && !(data.rooms[i].title === 'Hall') && <AiFillDelete className='delete-icon' id={'delete-' + data.rooms[i].id} onClick={destroyRoom}/>)
             },
             key: 'id',
-            render: (text, record) => (
+            render: (record) => (
               isGuide ? ( record.muted ? ( record.selected ? ( record.id === user.id ? (
                 <>
                 <AiOutlineAudioMuted className='mute-icon' id={'mute-' + record.id} />

@@ -172,9 +172,9 @@ class JanusClient {
           this.videoRoomPlugin.send({
             message,
             success: () => {
-              console.log('Joining room ' + message.room)
-              console.log('message', message)
-              console.log('videoRoomPlugin', this.videoRoomPlugin)
+              // console.log('Joining room ' + message.room)
+              // console.log('message', message)
+              // console.log('videoRoomPlugin', this.videoRoomPlugin)
               resolve(true)
             },
             error: (error) => {
@@ -317,7 +317,7 @@ class JanusClient {
   /**
    * Function that requests Janus to send or stop sending the video from videoRoom.
    */
-  subscribeToPublisher(relatedPublisher): void {
+  subscribeToPublisher(relatedPublisher: string): void {
     if (!this.subscriberPluginattached) {
       this.attachVideoSubscriberPlugin().then(() => {
         if (this.videoRoomSubscriberPlugin) {
@@ -346,6 +346,28 @@ class JanusClient {
       }
       this.videoRoomSubscriberPlugin &&
         this.videoRoomSubscriberPlugin.send({ message })
+    }
+  }
+
+  subscribeToFeed(publisherIdList: Array<string>): void {
+    if (this.subscriberPluginattached && publisherIdList.length > 0) {
+      // Subscribe to one or more feeds of active publisher in the video room
+      let message = {
+        request: 'subscribe',
+      }
+      if (publisherIdList.length > 1) {
+        let streams: any[] = []
+        for (let i = 0; i < publisherIdList.length; i++) {
+          streams.push({ feed: publisherIdList[i]})
+        }
+        message['streams'] = streams
+      } else {
+        message['streams'] = [{ feed: publisherIdList[0]}]
+      }
+      this.videoRoomSubscriberPlugin &&
+        this.videoRoomSubscriberPlugin.send({ message })
+    } else {
+      console.error('Subscriber plugin not attached or empty publisher id list.')
     }
   }
 
@@ -938,7 +960,6 @@ class JanusClient {
 
   private onMessageVideo(message, jsep): void {
     const { videoroom: msgType } = message
-    console.log('New video message', message)
 
     if (msgType) {
       switch (msgType) {

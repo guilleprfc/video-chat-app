@@ -20,7 +20,7 @@ const App: React.FC = () => {
         </Routes>
       </main>
     </Router>
-  );
+  )
 }
 
 export default App;

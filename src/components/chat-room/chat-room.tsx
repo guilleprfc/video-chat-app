@@ -363,7 +363,7 @@ const ChatRoom: React.FC<ChatRoomProps> = () => {
           Number(selectedParticipant.videoId)
         )
     } else {
-      console.log('Error: Participant is not a publisher.')
+      console.error('Error: Participant is not a publisher.')
     }
   }
 

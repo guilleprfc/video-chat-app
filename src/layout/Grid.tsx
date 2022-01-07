@@ -26,12 +26,4 @@ const Grid: React.FC = ({ children }) => {
   );
 };
 
-const GridBitcoin: React.FC = ({ children }) => {
-  return (
-    <div className='grid-bitcoin'>
-      {children}
-    </div>
-  );
-};
-
-export { Grid, GridBitcoin, GridItem };
+export { Grid, GridItem };
